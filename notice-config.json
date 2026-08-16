@@ -4,7 +4,12 @@
     "title": "Today’s small note",
     "copy": "A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.",
     "nextLabel": "NEXT",
-    "replayLabel": "REPLAY MEDIA"
+    "replayLabel": "REPLAY MEDIA",
+    "emptyMediaLabel": "Select NEXT to view the notice media.",
+    "imagePlaceholder": "Cloudinary image placeholder",
+    "videoPlaceholder": "Cloudinary video placeholder",
+    "buttonALabel": "Button A",
+    "buttonBLabel": "Button B"
   },
   "items": [
     {

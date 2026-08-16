@@ -1,40 +1,119 @@
-notice:
-  kicker: Notice
-  title: Today’s small note
-  copy: A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.
-  nextLabel: NEXT
-  replayLabel: REPLAY MEDIA
-
-items:
-  - id: notice-1
-    title: Today’s small note
-    copy: A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.
-    media:
-      type: image
-      src: CLOUDINARY_IMAGE_URL_PLACEHOLDER
-      alt: Notice image
-    buttonA:
-      label: Button A
-      href: https://example.com/a
-      target: _blank
-    buttonB:
-      label: Button B
-      href: https://example.com/b
-      target: _blank
-
-  - id: notice-2
-    title: A second notice
-    copy: This item can contain a different message, media asset, and pair of links.
-    media:
-      type: video
-      src: CLOUDINARY_VIDEO_URL_PLACEHOLDER
-      alt: Notice video
-      poster: ''
-    buttonA:
-      label: Button A
-      href: https://example.com/a-2
-      target: _blank
-    buttonB:
-      label: Button B
-      href: https://example.com/b-2
-      target: _blank
+content:
+  - name: noticeConfiguration
+    label: Notice configuration
+    type: file
+    path: notice-config.json
+    format: json
+    fields:
+      - name: notice
+        label: Notice settings
+        type: object
+        fields:
+          - name: kicker
+            label: Kicker
+            type: string
+          - name: title
+            label: Title
+            type: string
+          - name: copy
+            label: Copy
+            type: text
+          - name: nextLabel
+            label: Next button label
+            type: string
+          - name: replayLabel
+            label: Replay button label
+            type: string
+          - name: emptyMediaLabel
+            label: Empty media label
+            type: string
+          - name: imagePlaceholder
+            label: Image placeholder
+            type: string
+          - name: videoPlaceholder
+            label: Video placeholder
+            type: string
+          - name: buttonALabel
+            label: Button A fallback label
+            type: string
+          - name: buttonBLabel
+            label: Button B fallback label
+            type: string
+      - name: items
+        label: Notice items
+        type: object
+        list:
+          min: 1
+          collapsible:
+            collapsed: true
+            summary: "{title} ({index})"
+        fields:
+          - name: id
+            label: ID
+            type: string
+          - name: title
+            label: Item title
+            type: string
+          - name: copy
+            label: Item copy
+            type: text
+          - name: media
+            label: Media
+            type: object
+            fields:
+              - name: type
+                label: Media type
+                type: select
+                options:
+                  values:
+                    - image
+                    - video
+              - name: src
+                label: Media URL
+                type: string
+              - name: alt
+                label: Alt text
+                type: string
+              - name: poster
+                label: Video poster URL
+                type: string
+          - name: buttonA
+            label: Button A
+            type: object
+            fields:
+              - name: label
+                label: Label
+                type: string
+              - name: href
+                label: Link URL
+                type: string
+              - name: target
+                label: Link target
+                type: select
+                options:
+                  values:
+                    - _self
+                    - _blank
+              - name: ariaLabel
+                label: Accessible label
+                type: string
+          - name: buttonB
+            label: Button B
+            type: object
+            fields:
+              - name: label
+                label: Label
+                type: string
+              - name: href
+                label: Link URL
+                type: string
+              - name: target
+                label: Link target
+                type: select
+                options:
+                  values:
+                    - _self
+                    - _blank
+              - name: ariaLabel
+                label: Accessible label
+                type: string

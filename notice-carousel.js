@@ -3,11 +3,16 @@
   const $ = id => document.getElementById(id);
   const DEFAULT_NOTICE_CONFIG = {
     notice: {
-      kicker: 'Notice',
-      title: 'Today’s small note',
-      copy: 'A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.',
-      nextLabel: 'NEXT',
-      replayLabel: 'REPLAY MEDIA'
+      kicker: '',
+      title: '',
+      copy: '',
+      nextLabel: '',
+      replayLabel: '',
+      emptyMediaLabel: '',
+      imagePlaceholder: '',
+      videoPlaceholder: '',
+      buttonALabel: '',
+      buttonBLabel: ''
     },
     items: []
   };
@@ -100,7 +105,7 @@
       media: {
         type: String(inferredType).toLowerCase() === 'video' ? 'video' : 'image',
         src: String(mediaSrc || '').trim(),
-        alt: String(typeof media === 'object' ? (media.alt || item?.title || 'Notice media') : (item?.title || 'Notice media')),
+        alt: String(typeof media === 'object' ? (media.alt || item?.title || '') : (item?.title || '')),
         poster: String(typeof media === 'object' ? (media.poster || '') : '')
       },
       buttonA: item?.buttonA || item?.buttons?.[0] || null,
@@ -121,7 +126,7 @@
 
   function configureNoticeLink(anchor, action, fallbackLabel, fallbackClass) {
     if (!anchor) return;
-    const label = String(action?.label || fallbackLabel);
+    const label = String(action?.label || fallbackLabel || '');
     const href = String(action?.href || '').trim();
     anchor.textContent = label;
     anchor.className = `btn ${fallbackClass}`;
@@ -146,15 +151,15 @@
     $('noticePanelTitle').textContent = item?.title || config.notice.title;
     $('noticeCopy').textContent = item?.copy || config.notice.copy;
     $('noticeNextBtn').textContent = config.notice.nextLabel;
-    configureNoticeLink($('noticeButtonA'), item?.buttonA, 'Button A', 'primary');
-    configureNoticeLink($('noticeButtonB'), item?.buttonB, 'Button B', 'secondary');
+    configureNoticeLink($('noticeButtonA'), item?.buttonA, config.notice.buttonALabel, 'primary');
+    configureNoticeLink($('noticeButtonB'), item?.buttonB, config.notice.buttonBLabel, 'secondary');
     actions.classList.remove('is-visible');
     media.classList.add('hidden');
     media.classList.remove('is-revealed');
     media.replaceChildren();
     const placeholder = document.createElement('div');
     placeholder.className = 'notice-media-placeholder';
-    placeholder.textContent = 'Select NEXT to view the notice media.';
+    placeholder.textContent = config.notice.emptyMediaLabel;
     media.appendChild(placeholder);
 
     const hasMultiple = items.length > 1;
@@ -178,7 +183,7 @@
     if (!usableSrc) {
       const placeholder = document.createElement('div');
       placeholder.className = 'notice-media-placeholder';
-      placeholder.textContent = item.media.type === 'video' ? 'Cloudinary video placeholder' : 'Cloudinary image placeholder';
+      placeholder.textContent = item.media.type === 'video' ? noticeState.config.notice.videoPlaceholder : noticeState.config.notice.imagePlaceholder;
       media.appendChild(placeholder);
     } else if (item.media.type === 'video') {
       const video = document.createElement('video');

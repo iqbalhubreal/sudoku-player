@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Constraint Sudoku Player</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Comic+Neue:wght@400;700&family=Fira+Code:wght@500;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <header class="hero">
+    <div>
+      <div class="eyebrow">Constraint Sudoku</div>
+      <h1>Play your Sudoku.</h1>
+      <p>Choose a puzzle from the library, then solve it with mouse, keyboard, or the on-screen keypad.</p>
+    </div>
+    <div class="hero-actions">
+      <button class="icon-btn" id="settingsBtn" type="button" title="Appearance Settings" aria-label="Appearance Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+      <button class="icon-btn" id="hamburgerBtn" type="button" aria-label="Open menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="card library-card">
+    <div class="section-title">
+      <h2>Sudoku Library</h2>
+    </div>
+    <p class="config-note" id="apiConfigNote">The latest five puzzles and liked puzzles are saved with their JSON for offline play.</p>
+    <div class="library-toolbar">
+      <div class="library-search-row">
+        <input id="librarySearch" maxlength="5" inputmode="text" autocomplete="off" placeholder="Puzzle number (e.g., A1234)" aria-label="Puzzle number">
+        <button class="btn primary" id="searchPuzzleBtn" type="button">Search</button>
+      </div>
+      <div class="progress-tools">
+        <button class="btn ghost" id="recentBtn" type="button">Recent</button>
+        <button class="btn ghost" id="likedBtn" type="button">♥ Liked Puzzles</button>
+      </div>
+    </div>
+    <div class="library-filters">
+      <select id="statusFilter" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="Not Started">Not Started</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Solved">Solved</option>
+      </select>
+      <select id="difficultyFilter" aria-label="Filter by difficulty">
+        <option value="">All difficulties</option>
+        <option value="Beginner">Beginner</option>
+        <option value="Intermediate">Intermediate</option>
+        <option value="Advanced">Advanced</option>
+        <option value="Beyond Logic">Beyond Logic</option>
+        <option value="Unrated">Unrated</option>
+      </select>
+      <select id="gridTypeFilter" aria-label="Filter by grid type">
+        <option value="">All grid types</option>
+        <option value="Single grid">Single Grid</option>
+        <option value="Multi grid">Multi Grid</option>
+      </select>
+      <select id="gridCountFilter" aria-label="Filter by number of grids">
+        <option value="">All grid counts</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+      </select>
+      <input id="constraintFilter" placeholder="Constraint type" autocomplete="off" aria-label="Filter by constraint type">
+    </div>
+    <div class="library-toolbar">
+      <span class="library-status" id="libraryStatus">Loading recent puzzles…</span>
+      <button class="btn secondary" id="applyFiltersBtn" type="button">Apply Filters</button>
+    </div>
+    <div id="libraryEmpty" class="library-empty hidden">No puzzles match these selections.</div>
+    <div id="libraryList" class="library-list"></div>
+    <div class="library-more"><button class="btn ghost hidden" id="loadMoreBtn" type="button">Load More</button></div>
+  </section>
+
+  <main class="layout">
+    <section class="card play-card">
+      <div id="emptyState" class="empty">
+        <div>
+          <strong>Your board is waiting.</strong>
+          Select a Sudoku from the library above to start playing.
+        </div>
+      </div>
+      <div id="gameState" class="hidden">
+        <div class="play-head">
+          <div>
+            <h2 id="puzzleTitle">Sudoku puzzle</h2>
+            <div class="subline" id="puzzleSubtitle">Classic Sudoku</div>
+            <div class="play-actions-row">
+              <span class="puzzle-code-badge" id="boardPuzzleNumber">#—</span>
+              <button class="btn ghost current-like-btn" id="currentLikeBtn" type="button" aria-label="Like this puzzle">♡ Like</button>
+              <button class="btn ghost" id="fullscreenBtn" type="button" aria-label="Enter Fullscreen Mode">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                Fullscreen
+              </button>
+              <button class="btn ghost" id="shareBtn" type="button" aria-label="Share this puzzle">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+                Share
+              </button>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat"><strong id="filledStat">0/81</strong><small>filled</small></div>
+            <div class="stat"><strong id="mistakeStat">0</strong><small>mistakes</small></div>
+            <div class="stat"><strong id="timerStat">00:00</strong><small>time</small></div>
+          </div>
+        </div>
+        <div class="board-wrap"><div id="board" class="board" role="grid" aria-label="Sudoku board"></div></div>
+
+        <div class="keypad" id="keypad">
+          <button class="key" data-key="1">1</button>
+          <button class="key" data-key="2">2</button>
+          <button class="key" data-key="3">3</button>
+          <button class="key" data-key="4">4</button>
+          <button class="key" data-key="5">5</button>
+          <button class="key" data-key="6">6</button>
+          <button class="key" data-key="7">7</button>
+          <button class="key" data-key="8">8</button>
+          <button class="key" data-key="9">9</button>
+          <button class="key erase" data-key="erase">Erase</button>
+        </div>
+        <div class="board-notes-control">
+          <span>Notes mode</span>
+          <button class="toggle" id="notesToggle" aria-label="Toggle notes mode"><i></i></button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="card side-card">
+        <h3>Progress</h3>
+        <div class="status-box">
+          <strong id="statusTitle">Ready to play</strong>
+          <p id="statusText">Select a cell and enter a number.</p>
+        </div>
+        <div class="action-grid">
+          <button class="btn primary" id="checkBtn">Check answers</button>
+          <button class="btn good" id="hintBtn">Give me a hint</button>
+          <button class="btn warn" id="resetBtn">Reset puzzle</button>
+          <button class="btn secondary" id="solveBtn">Show solution</button>
+        </div>
+      </section>
+
+      <section class="card side-card">
+        <h3>Puzzle details</h3>
+        <div class="meta-grid">
+          <div class="meta"><span>Difficulty</span><strong id="difficultyMeta">—</strong></div>
+          <div class="meta"><span>Givens</span><strong id="givensMeta">—</strong></div>
+          <div class="meta"><span>Grids</span><strong id="gridCountMeta">—</strong></div>
+          <div class="meta"><span>Grid mode</span><strong id="gridModeMeta">—</strong></div>
+          <div class="meta techniques-meta">
+            <span>Grid involvement</span>
+            <div id="gridDetailsMeta" class="technique-list"><span class="techniques-empty">—</span></div>
+          </div>
+          <div class="meta techniques-meta">
+            <span>Techniques</span>
+            <div id="techniqueMeta" class="technique-list"><span class="techniques-empty">—</span></div>
+          </div>
+        </div>
+        <div class="colors-panel">
+          <div class="colors-heading">Constraint colors used</div>
+          <p class="colors-explainer" id="constraintColorRole">Colored cells form additional no-repeat groups; duplicate entries inside them are flagged immediately.</p>
+          <div class="colors-list" id="constraintColors"><span class="colors-empty">—</span></div>
+        </div>
+      </section>
+
+      <section class="card side-card">
+        <h3>Playing controls</h3>
+        <p class="instructions"><b>Keyboard:</b> click a cell, type 1–9, use Backspace/Delete to erase, and use arrow keys to move. In notes mode, numbers become pencil marks. Press <b>N</b> to toggle notes.</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">© 2026 Lovdoku. All rights reserved.</footer>
+</div>
+
+<!-- FIX 2: Full-screen overlay container -->
+<div class="fullscreen-overlay" id="fullscreenOverlay" aria-hidden="true">
+  <div class="fs-header">
+    <div class="fs-title-group">
+      <span class="fs-badge" id="fsPuzzleBadge">#—</span>
+      <span class="fs-title" id="fsPuzzleTitle">Sudoku</span>
+    </div>
+    <div class="fs-controls">
+      <div class="fs-grid-nav" id="fsGridNav">
+        <span class="fs-label">Focus:</span>
+        <button class="btn ghost fs-icon-btn" id="fsPrevGridBtn" title="Previous Grid ( [ )">‹</button>
+        <select id="fsGridSelect" class="fs-select" aria-label="Select grid focus"></select>
+        <button class="btn ghost fs-icon-btn" id="fsNextGridBtn" title="Next Grid ( ] )">›</button>
+      </div>
+      <div class="fs-progress-nav" aria-label="Progress controls">
+        <button class="btn ghost fs-progress-btn" id="fsCheckBtn" type="button">Check</button>
+        <button class="btn ghost fs-progress-btn" id="fsHintBtn" type="button">Hint</button>
+        <button class="btn ghost fs-progress-btn" id="fsResetBtn" type="button">Reset</button>
+        <button class="btn ghost fs-progress-btn" id="fsSolveBtn" type="button">Solve</button>
+      </div>
+      <button class="btn ghost fs-icon-btn fs-settings-btn" id="fsSettingsBtn" type="button" title="Open settings" aria-label="Open settings">⚙</button>
+      <button class="btn danger" id="fsExitBtn" type="button" title="Exit Fullscreen (Esc)">
+        ✕ Exit Fullscreen
+      </button>
+    </div>
+  </div>
+  <div class="fs-viewport" id="fsViewport">
+    <div class="fs-transform-layer" id="fsTransformLayer">
+      <div id="fsBoardSlot"></div>
+    </div>
+  </div>
+  <div class="fs-footer">
+    <div id="fsKeypadSlot"></div>
+    <div id="fsNotesSlot"></div>
+  </div>
+</div>
+
+<div class="drawer-overlay" id="drawerOverlay" aria-hidden="true"></div>
+<aside class="drawer-panel" id="drawerPanel" role="dialog" aria-modal="true" aria-label="Menu panel">
+  <div class="drawer-header">
+    <h3>Menu, Progress & Settings</h3>
+    <button class="drawer-close-btn" id="closeDrawerBtn" aria-label="Close menu">&times;</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-section">
+      <h4>Progress Data</h4>
+      <p class="drawer-desc">Export your current puzzle progress to a file or restore previously saved data.</p>
+      <div class="drawer-actions">
+        <button class="btn secondary drawer-btn" id="exportProgressBtn" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export Progress
+        </button>
+        <label class="btn ghost drawer-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Import Progress
+          <input id="progressFileInput" class="hidden-file" type="file" accept=".json,application/json">
+        </label>
+        <button class="btn ghost drawer-btn" id="drawerSettingsBtn" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Appearance Settings
+        </button>
+      </div>
+    </div>
+    <section class="notice-card drawer-notice-card" aria-labelledby="noticePanelTitle" data-notice-config="noticeConfigJson">
+      <div class="notice-heading">
+        <div>
+          <span class="notice-kicker" id="noticeKicker">Notice</span>
+          <h3 id="noticePanelTitle">Today’s small note</h3>
+        </div>
+        <span class="notice-dot" aria-hidden="true"></span>
+      </div>
+      <p class="notice-copy" id="noticeCopy">A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.</p>
+      <button class="btn secondary notice-next" id="noticeNextBtn" type="button">NEXT</button>
+      <div class="notice-media hidden" id="noticeMedia" aria-live="polite">
+        <div class="notice-media-placeholder">Select NEXT to view the notice media.</div>
+      </div>
+      <div class="notice-actions" id="noticeActions" aria-label="Notice actions">
+        <a class="btn primary" id="noticeButtonA" href="#" hidden>Button A</a>
+        <a class="btn secondary" id="noticeButtonB" href="#" hidden>Button B</a>
+      </div>
+      <div class="notice-carousel-nav hidden" id="noticeCarouselNav" aria-label="Notice media navigation">
+        <button class="icon-btn" id="noticePrevItemBtn" type="button" aria-label="Previous notice" title="Previous notice">←</button>
+        <span class="notice-carousel-status" id="noticeCarouselStatus" aria-live="polite"></span>
+        <button class="icon-btn" id="noticeNextItemBtn" type="button" aria-label="Next notice" title="Next notice">→</button>
+      </div>
+    </section>
+  </div>
+</aside>
+
+<div class="modal-overlay" id="settingsModal" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Appearance Settings Modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Appearance Settings</h3>
+      <button class="drawer-close-btn" id="closeSettingsBtn" type="button" aria-label="Close settings">&times;</button>
+    </div>
+    
+    <div class="settings-content">
+    <div class="settings-group">
+      <div class="settings-label">
+        <span>Font Family</span>
+      </div>
+      <select id="fontFamilySelect" class="settings-select">
+        <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Default)</option>
+        <option value="'JetBrains Mono', monospace">JetBrains Mono (Monospace)</option>
+        <option value="'Inter', sans-serif">Inter (Clean Sans)</option>
+        <option value="'Roboto', sans-serif">Roboto (Modern)</option>
+        <option value="'Fira Code', monospace">Fira Code (Code)</option>
+        <option value="'Comic Neue', cursive">Comic Neue (Casual)</option>
+        <option value="'Cinzel', serif">Cinzel (Classic Serif)</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">
+        <span>Font Size (% of Cell Height)</span>
+        <small id="fontSizeValDisplay">65%</small>
+      </div>
+      <input type="range" id="fontSizeRange" class="settings-range" min="40" max="90" step="1" value="65">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">
+        <span>Font Weight</span>
+      </div>
+      <select id="fontWeightSelect" class="settings-select">
+        <option value="400">400 - Regular</option>
+        <option value="500">500 - Medium</option>
+        <option value="600">600 - SemiBold</option>
+        <option value="700">700 - Bold (Default)</option>
+        <option value="800">800 - ExtraBold</option>
+        <option value="900">900 - Black</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label"><span>Thin grid line</span><small id="thinLineValDisplay">1px</small></div>
+      <input type="range" id="thinLineRange" class="settings-range" min="0.2" max="3" step="0.1" value="1">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label"><span>Thick grid line</span><small id="thickLineValDisplay">3px</small></div>
+      <input type="range" id="thickLineRange" class="settings-range" min="1" max="7" step="0.5" value="3">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label"><span>Thin line color</span></div>
+      <select id="thinLineColorSelect" class="settings-select" aria-label="Thin grid line color">
+        <option value="#cbd5e1">Gray</option>
+        <option value="#0f172a">Black</option>
+        <option value="#dc2626">Red</option>
+        <option value="#2563eb">Blue</option>
+        <option value="#16a34a">Green</option>
+        <option value="#7c3aed">Purple</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label"><span>Thick line color</span></div>
+      <select id="thickLineColorSelect" class="settings-select" aria-label="Thick grid line color">
+        <option value="#0f172a">Black</option>
+        <option value="#64748b">Gray</option>
+        <option value="#dc2626">Red</option>
+        <option value="#2563eb">Blue</option>
+        <option value="#16a34a">Green</option>
+        <option value="#7c3aed">Purple</option>
+      </select>
+    </div>
+
+    <div class="font-preview-box">
+      <div class="settings-label" style="justify-content:center; margin-bottom:10px;">Preview Cell</div>
+      <div class="font-preview-cell" id="fontPreviewCell">7</div>
+    </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn ghost" id="resetFontSettingsBtn" type="button">Reset Defaults</button>
+      <button class="btn primary" id="saveFontSettingsBtn" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+  <script src="notice-carousel.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

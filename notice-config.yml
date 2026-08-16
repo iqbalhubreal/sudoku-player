@@ -1,0 +1,38 @@
+notice:
+  kicker: Notice
+  title: Today’s small note
+  copy: A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.
+  nextLabel: NEXT
+  replayLabel: REPLAY MEDIA
+items:
+  - id: notice-1
+    title: Today’s small note
+    copy: A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.
+    media:
+      type: image
+      src: CLOUDINARY_IMAGE_URL_PLACEHOLDER
+      alt: Notice image
+    buttonA:
+      label: Button A
+      href: https://example.com/a
+      target: _blank
+    buttonB:
+      label: Button B
+      href: https://example.com/b
+      target: _blank
+  - id: notice-2
+    title: A second notice
+    copy: This item can contain a different message, media asset, and pair of links.
+    media:
+      type: video
+      src: CLOUDINARY_VIDEO_URL_PLACEHOLDER
+      alt: Notice video
+      poster: ''
+    buttonA:
+      label: Button A
+      href: https://example.com/a-2
+      target: _blank
+    buttonB:
+      label: Button B
+      href: https://example.com/b-2
+      target: _blank

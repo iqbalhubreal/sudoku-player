@@ -219,7 +219,8 @@
   function validCode(code){return /^[A-Z]\d{4}$/.test(code)}
 
   function currentProgressRecord(){if(!state.currentPuzzleCode||!state.puzzle)return null;return {code:state.currentPuzzleCode,values:[...state.values],notes:state.notes.map(set=>[...set]),elapsed:state.elapsed,mistakes:state.mistakes,status:state.status,updatedAt:Date.now()}}
-  function restoreProgress(progress){if(!progress)return;state.values=Array.from({length:state.puzzle.total},(_,i)=>state.givens[i]?state.givens[i]:num(progress.values?.[i]));state.notes=Array.from({length:state.puzzle.total},(_,i)=>new Set(Array.isArray(progress.notes?.[i])?progress.notes[i].map(num).filter(Boolean):[]));state.elapsed=Math.max(0,Number(progress.elapsed)||0);state.mistakes=Math.max(0,Number(progress.mistakes)||0);state.status=['Not Started','In Progress','Solved'].includes(progress.status)?progress.status:(state.values.some((v,i)=>!state.givens[i]&&v)?'In Progress':'Not Started');state.finished=state.status==='Solved'}
+  function hasPlayerEntries(){return Boolean(state.puzzle&&state.values.some((v,i)=>!state.givens[i]&&v));}
+  function restoreProgress(progress){if(!progress)return;state.values=Array.from({length:state.puzzle.total},(_,i)=>state.givens[i]?state.givens[i]:num(progress.values?.[i]));state.notes=Array.from({length:state.puzzle.total},(_,i)=>new Set(Array.isArray(progress.notes?.[i])?progress.notes[i].map(num).filter(Boolean):[]));state.elapsed=hasPlayerEntries()?Math.max(0,Number(progress.elapsed)||0):0;state.mistakes=Math.max(0,Number(progress.mistakes)||0);state.status=['Not Started','In Progress','Solved'].includes(progress.status)?progress.status:(hasPlayerEntries()?'In Progress':'Not Started');if(!hasPlayerEntries()&&state.status!=='Solved')state.status='Not Started';state.finished=state.status==='Solved'}
   function syncStatusAfterChange(){state.finished=false;state.status=isSolved()?'Solved':'In Progress';if(state.status==='Solved')state.finished=true;persistProgress();renderLibrary()}
   function persistProgress(){if(!state.currentPuzzleCode||!state.puzzle)return;const progress=getProgressStore();progress[state.currentPuzzleCode]=currentProgressRecord();writeStorage(STORAGE_KEYS.progress,progress)}
   function setStatusFromState(){if(state.status==='Solved')setStatus('Solved','Puzzle complete — every required cell is correct.','ok');else if(state.status==='In Progress')setStatus('In Progress','Your progress is being saved automatically.','');else setStatus('Not Started','Select a cell and enter a number.','')}
@@ -605,14 +606,14 @@
     }
   }
 
-  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n))state.notes[i].delete(n);else state.notes[i].add(n);state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt)state.startedAt=Date.now()}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
+  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n))state.notes[i].delete(n);else state.notes[i].add(n);state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
   function autoRemoveNote(n,index){if(!n)return;peersOf(index).forEach(p=>state.notes[p].delete(n))}
   function conflicts(){const bad=new Set();groupSets().forEach(g=>{const seen=new Map();g.forEach(i=>{const v=state.values[i]||state.givens[i];if(v){if(!seen.has(v))seen.set(v,[]);seen.get(v).push(i)}});seen.forEach(arr=>{if(arr.length>1)arr.forEach(i=>bad.add(i))})});return bad}
   function check(){const bad=conflicts();state.conflicts=bad;let wrong=0;state.values.forEach((v,i)=>{if(v&&state.solution[i]&&v!==state.solution[i]&&!state.givens[i]){state.wrong.add(i);wrong++}});state.mistakes+=wrong;if(state.values.some((v,i)=>!state.givens[i]&&v))state.status=isSolved()?'Solved':'In Progress';state.finished=state.status==='Solved';persistProgress();renderLibrary();render();if(bad.size||wrong){setStatus('Keep going','Some entries need attention. Red cells are conflicts or incorrect answers.','bad');toast(`${bad.size+wrong} answer${bad.size+wrong===1?'':'s'} need attention.`)}else if(isSolved()){setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}else{setStatus('In Progress','Your progress is being saved automatically.','');toast('No mistakes so far.')}}
   function isSolved(){return state.values.every((v,i)=>v===state.solution[i]&&v>0)}
   function checkComplete(){if(state.solution.every(Boolean)&&isSolved()){state.finished=true;state.status='Solved';persistProgress();renderLibrary();setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}}
   function hint(){if(!state.puzzle||state.selected<0){toast('Select an empty cell first.');return}let i=state.selected;if(state.givens[i]){const empties=state.values.map((v,k)=>!state.givens[k]&&!v?k:-1).filter(k=>k>=0);i=empties[0]??-1}if(i<0||!state.solution[i]){toast('No hint is available for this puzzle.');return}state.selected=i;state.values[i]=state.solution[i];state.notes[i].clear();autoRemoveNote(state.solution[i],i);state.conflicts.clear();syncStatusAfterChange();render();setStatusFromState();checkComplete()}
-  function reset(){if(!state.puzzle)return;state.values=[...state.givens];state.notes=Array.from({length:state.puzzle.total},()=>new Set());state.selected=-1;state.mistakes=0;state.wrong.clear();state.conflicts.clear();state.finished=false;state.status='Not Started';state.startedAt=null;state.elapsed=0;resetSolutionButtonState();persistProgress();renderLibrary();setStatusFromState();render();toast('Puzzle reset.')}
+  function reset(){if(!state.puzzle)return;stopTimer();state.values=[...state.givens];state.notes=Array.from({length:state.puzzle.total},()=>new Set());state.selected=-1;state.mistakes=0;state.wrong.clear();state.conflicts.clear();state.finished=false;state.status='Not Started';state.startedAt=null;state.elapsed=0;resetSolutionButtonState();persistProgress();renderLibrary();setStatusFromState();render();toast('Puzzle reset.')}
   function updateStats(){const filled=state.values.filter(Boolean).length,total=state.puzzle?.total||81;$('filledStat').textContent=`${filled}/${total}`;$('mistakeStat').textContent=state.mistakes;$('timerStat').textContent=formatTime(state.elapsed)}
 
   function formatTime(s){
@@ -894,6 +895,7 @@
   }
 
   function load(puzzleRaw, {code, record, progress}={}){
+    stopTimer();
     const parsed = normalize(puzzleRaw);
     state.puzzle = parsed;
     state.givens = [...parsed.givens];
@@ -932,7 +934,7 @@
     renderMetadata();
     render();
     setStatusFromState();
-    startTimer();
+    if(hasPlayerEntries()&&!state.finished) startTimer();
 
     if(state.fsActive) {
       updateFsTitle();

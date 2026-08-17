@@ -505,7 +505,7 @@
     // must not overwrite the settings that are active for this puzzle during the session.
     const coords=state.puzzle.map.coords,minR=Math.min(...coords.map(x=>x[0])),maxR=Math.max(...coords.map(x=>x[0])),minC=Math.min(...coords.map(x=>x[1])),maxC=Math.max(...coords.map(x=>x[1]));
     const width=maxC-minC+1,height=maxR-minR+1;
-    const lineScale=Math.max(0.55,Math.min(1.45,9/Math.max(1,width,height)));
+    const lineScale=Math.max(0.25,Math.min(1.45,9/Math.max(1,width,height)));
     board.style.setProperty('--line-scale',lineScale.toFixed(3));
     if(state.puzzle.mode==='multi_grid'){const available=Math.max(260,board.parentElement?.clientWidth||840),cellSize=Math.min(48,available/width);board.style.width=`${width*cellSize}px`;board.style.height=`${height*cellSize}px`;board.style.gridTemplateColumns=`repeat(${width},${cellSize}px)`;board.style.gridTemplateRows=`repeat(${height},${cellSize}px)`}else{board.style.width='';board.style.height='';board.style.gridTemplateColumns='repeat(9,minmax(0,1fr))';board.style.gridTemplateRows='repeat(9,minmax(0,1fr))'}
     

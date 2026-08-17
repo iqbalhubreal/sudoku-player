@@ -1013,6 +1013,7 @@
       const board = $('board');
       const keypad = $('keypad');
       const notesToggle = $('notesToggle');
+      const hintButton = $('hintBtn');
 
       if (board && board.contains(e.target)) return;
       // These controls operate on the selected cell; keep the selection long enough for
@@ -1020,6 +1021,7 @@
       // the grid and clears the selection immediately.
       if (keypad && keypad.contains(e.target)) return;
       if (notesToggle && notesToggle.contains(e.target)) return;
+      if (hintButton && hintButton.contains(e.target)) return;
 
       state.selected = -1;
       render();

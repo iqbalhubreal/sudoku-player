@@ -383,16 +383,20 @@
     }catch(_){return false}
   }
 
+  const SHARE_IMAGE_WORKER_SOURCE=`self.onmessage=async(event)=>{const {bitmap,type='image/jpeg',quality=.88}=event.data||{};try{if(!bitmap||typeof OffscreenCanvas==='undefined')throw new Error('Worker image processing is unavailable.');const canvas=new OffscreenCanvas(bitmap.width,bitmap.height);const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('Could not create the worker canvas.');context.drawImage(bitmap,0,0);bitmap.close?.();const blob=await canvas.convertToBlob({type,quality});self.postMessage({ok:true,blob})}catch(error){bitmap?.close?.();self.postMessage({ok:false,error:error?.message||'Worker image processing failed.'})}};self.postMessage({ready:true});`;
+
   function encodeShareImage(canvas){
     const fallback=()=>new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
     if(typeof Worker==='undefined'||typeof createImageBitmap!=='function'||typeof OffscreenCanvas==='undefined')return fallback();
     return new Promise(async(resolve,reject)=>{
       let worker=null;
+      let workerUrl=null;
       let bitmap=null;
-      const finish=()=>worker?.terminate();
+      const finish=()=>{worker?.terminate();if(workerUrl)URL.revokeObjectURL(workerUrl)};
       const fallbackFromWorker=()=>{finish();fallback().then(resolve,reject)};
       try{
-        worker=new Worker('share-image-worker.js');
+        workerUrl=URL.createObjectURL(new Blob([SHARE_IMAGE_WORKER_SOURCE],{type:'application/javascript'}));
+        worker=new Worker(workerUrl);
         worker.onmessage=event=>{
           if(event.data?.ready)return;
           if(event.data?.ok){finish();resolve(event.data.blob)}else fallbackFromWorker();

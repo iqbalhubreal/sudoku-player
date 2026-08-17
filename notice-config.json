@@ -1,7 +1,6 @@
 {
   "notice": {
-    "kicker": "Notice",
-    "title": "Today’s small note",
+    "kicker": "About Me",
     "copy": "A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.",
     "nextLabel": "NEXT",
     "replayLabel": "REPLAY MEDIA",
@@ -14,20 +13,19 @@
   "items": [
     {
       "id": "notice-1",
-      "title": "Today’s small note",
-      "copy": "A quiet puzzle is still a conversation: take one square at a time, notice the patterns, and let the solution arrive without rushing.",
+      "copy": "Hi, I’m Iqbal, an independent KDP publisher creating Sudoku and puzzle books for enjoyable, screen-free activities. If you enjoy these puzzles, you can support my work by exploring my books, purchasing one, or leaving an honest review.",
       "media": {
         "type": "image",
         "src": "CLOUDINARY_IMAGE_URL_PLACEHOLDER",
         "alt": "Notice image"
       },
       "buttonA": {
-        "label": "Button A",
+        "label": "Preview",
         "href": "https://example.com/a",
         "target": "_blank"
       },
       "buttonB": {
-        "label": "Button B",
+        "label": "Shop",
         "href": "https://example.com/b",
         "target": "_blank"
       }

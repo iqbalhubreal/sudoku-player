@@ -125,15 +125,12 @@
     if (colors.gridLine) document.documentElement.style.setProperty('--thick-line-color', colors.gridLine);
     if (colors.puzzleNumbers) document.documentElement.style.setProperty('--given', colors.puzzleNumbers);
     if (colors.solutionNumbers) document.documentElement.style.setProperty('--entry', colors.solutionNumbers);
-    if (settings.lineColor) {
-      document.documentElement.style.setProperty('--thin-line-color', settings.lineColor);
-      document.documentElement.style.setProperty('--thick-line-color', settings.lineColor);
-    }
+    if (settings.lineColor) document.documentElement.style.setProperty('--thick-line-color', settings.lineColor);
+    document.documentElement.style.setProperty('--thin-line-color', '#cbd5e1');
     if (settings.puzzleNumberColor) document.documentElement.style.setProperty('--given', settings.puzzleNumberColor);
     if (settings.solutionNumberColor) document.documentElement.style.setProperty('--entry', settings.solutionNumberColor);
     if (Number.isFinite(Number(settings.thinLineWidth))) document.documentElement.style.setProperty('--thin-line-width', `${Number(settings.thinLineWidth)}px`);
     if (Number.isFinite(Number(settings.thickLineWidth))) document.documentElement.style.setProperty('--thick-line-width', `${Number(settings.thickLineWidth)}px`);
-    if (settings.thinLineColor) document.documentElement.style.setProperty('--thin-line-color', settings.thinLineColor);
     if (settings.thickLineColor) document.documentElement.style.setProperty('--thick-line-color', settings.thickLineColor);
   }
 

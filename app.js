@@ -383,6 +383,32 @@
     }catch(_){return false}
   }
 
+  function encodeShareImage(canvas){
+    const fallback=()=>new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
+    if(typeof Worker==='undefined'||typeof createImageBitmap!=='function'||typeof OffscreenCanvas==='undefined')return fallback();
+    return new Promise(async(resolve,reject)=>{
+      let worker=null;
+      let bitmap=null;
+      const finish=()=>worker?.terminate();
+      const fallbackFromWorker=()=>{finish();fallback().then(resolve,reject)};
+      try{
+        worker=new Worker('share-image-worker.js');
+        worker.onmessage=event=>{
+          if(event.data?.ready)return;
+          if(event.data?.ok){finish();resolve(event.data.blob)}else fallbackFromWorker();
+        };
+        worker.onerror=()=>fallbackFromWorker();
+        bitmap=await createImageBitmap(canvas);
+        worker.postMessage({bitmap,type:'image/jpeg',quality:.88},[bitmap]);
+        bitmap=null;
+      }catch(error){
+        bitmap?.close?.();
+        finish();
+        fallback().then(resolve,reject);
+      }
+    });
+  }
+
   async function downloadShareImage(){
     if(!state.puzzle){toast('Choose a puzzle first.');return}
     if(!window.html2canvas){toast('The share image tool is still loading.');return}
@@ -403,7 +429,7 @@
     try{
       await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
       const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1.35,useCORS:true,allowTaint:false,logging:false,imageTimeout:0});
-      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
+      const blob=await encodeShareImage(canvas);
       if(!blob)throw new Error('Image creation failed.');
       const url=URL.createObjectURL(blob),a=document.createElement('a');
       a.href=url;a.download=`lovdoku-${state.currentPuzzleCode||'puzzle'}-share.jpg`;a.click();

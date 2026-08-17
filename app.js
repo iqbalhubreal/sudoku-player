@@ -439,7 +439,7 @@
       a.href=url;a.download=`${state.currentPuzzleCode||'puzzle'}.jpg`;a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
       const copied=await copyPromise;
-      toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.',3500);
+      toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.',5000);
     }catch(err){
       console.error('Share image download failed',err);
       toast('Could not create the share image.');

@@ -370,10 +370,8 @@
   }
 
   function progressLinkText(){
-    const filled=state.values.reduce((count,value,index)=>count+(!state.givens[index]&&value?1:0),0);
-    const total=state.puzzle?.total||state.values.length;
     const code=state.currentPuzzleCode||'puzzle';
-    return `Lovdoku progress for ${code}: ${filled}/${total} filled, ${state.mistakes} mistakes, ${formatTime(liveElapsed())} time.\nContinue here: ${window.location.href}`;
+    return `${code}\n${window.location.href}`;
   }
 
   async function copyProgressLink(){
@@ -393,22 +391,23 @@
     if(!layout||!footer)return;
     if(state.fsActive){toast('Exit fullscreen before downloading the share image.');return}
     if(button){button.disabled=true;button.textContent='Preparing…'}
+    const copyPromise=copyProgressLink();
     const stage=document.createElement('div');
-    const captureWidth=Math.max(900,Math.min(1200,document.documentElement.clientWidth||1200));
+    const captureWidth=Math.max(800,Math.min(1000,document.documentElement.clientWidth||1000));
     stage.className='share-capture-stage';
     stage.style.width=`${captureWidth}px`;
     stage.append(layout.cloneNode(true),footer.cloneNode(true));
     stage.querySelector('#shareBtn')?.remove();
     document.body.appendChild(stage);
     try{
-      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-      const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1.35,useCORS:true,allowTaint:false,logging:false,imageTimeout:0});
-      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+      const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1,useCORS:true,allowTaint:false,logging:false,imageTimeout:3000});
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.8));
       if(!blob)throw new Error('Image creation failed.');
       const url=URL.createObjectURL(blob),a=document.createElement('a');
       a.href=url;a.download=`lovdoku-${state.currentPuzzleCode||'puzzle'}-share.jpg`;a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
-      const copied=await copyProgressLink();
+      const copied=await copyPromise;
       toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.');
     }catch(err){
       console.error('Share image download failed',err);

@@ -55,11 +55,7 @@
   const defaultFontSettings = {
     family: "'Plus Jakarta Sans', sans-serif",
     sizePct: 65,
-    weight: '700',
-    thinLine: 1,
-    thickLine: 3,
-    thinLineColor: '#cbd5e1',
-    thickLineColor: '#0f172a'
+    weight: '700'
   };
   let fontSettings = {...defaultFontSettings};
 
@@ -69,10 +65,6 @@
       fontSettings.family = saved.family || defaultFontSettings.family;
       fontSettings.sizePct = Math.min(90, Math.max(40, Number(saved.sizePct) || 65));
       fontSettings.weight = String(saved.weight || '700');
-      fontSettings.thinLine = Math.min(3, Math.max(0.2, Number(saved.thinLine) || 1));
-      fontSettings.thickLine = Math.min(7, Math.max(1, Number(saved.thickLine) || 3));
-      fontSettings.thinLineColor = saved.thinLineColor || defaultFontSettings.thinLineColor;
-      fontSettings.thickLineColor = saved.thickLineColor || defaultFontSettings.thickLineColor;
     }
     applyFontSettings();
   }
@@ -86,21 +78,11 @@
     document.documentElement.style.setProperty('--board-font-family', fontSettings.family);
     document.documentElement.style.setProperty('--board-font-weight', fontSettings.weight);
     document.documentElement.style.setProperty('--cell-font-pct', fontSettings.sizePct);
-    document.documentElement.style.setProperty('--thin-line-width', `${fontSettings.thinLine}px`);
-    document.documentElement.style.setProperty('--thick-line-width', `${fontSettings.thickLine}px`);
-    document.documentElement.style.setProperty('--thin-line-color', fontSettings.thinLineColor);
-    document.documentElement.style.setProperty('--thick-line-color', fontSettings.thickLineColor);
     
     if ($('fontFamilySelect')) $('fontFamilySelect').value = fontSettings.family;
     if ($('fontSizeRange')) $('fontSizeRange').value = fontSettings.sizePct;
     if ($('fontSizeValDisplay')) $('fontSizeValDisplay').textContent = `${fontSettings.sizePct}%`;
     if ($('fontWeightSelect')) $('fontWeightSelect').value = fontSettings.weight;
-    if ($('thinLineRange')) $('thinLineRange').value = fontSettings.thinLine;
-    if ($('thickLineRange')) $('thickLineRange').value = fontSettings.thickLine;
-    if ($('thinLineValDisplay')) $('thinLineValDisplay').textContent = `${fontSettings.thinLine}px`;
-    if ($('thickLineValDisplay')) $('thickLineValDisplay').textContent = `${fontSettings.thickLine}px`;
-    if ($('thinLineColorSelect')) $('thinLineColorSelect').value = fontSettings.thinLineColor;
-    if ($('thickLineColorSelect')) $('thickLineColorSelect').value = fontSettings.thickLineColor;
 
     updateCellFontSizePx();
     updateFontPreviewCell();
@@ -562,7 +544,7 @@
     const ctx=canvas.getContext('2d');if(!ctx)return null;
     const rootStyles=getComputedStyle(document.documentElement),thinColor=rootStyles.getPropertyValue('--thin-line-color').trim()||'#cbd5e1',thickColor=rootStyles.getPropertyValue('--thick-line-color').trim()||'#0f172a',givenColor=rootStyles.getPropertyValue('--given').trim()||'#0f172a',entryColor=rootStyles.getPropertyValue('--entry').trim()||'#2563eb';
     const lineScale=state.puzzle.mode==='multi_grid'?Math.max(.55,Math.min(1,9/Math.max(cols,rows))):1;
-    const thin=Math.max(.2,(parseFloat(rootStyles.getPropertyValue('--thin-line-width'))||Number(fontSettings.thinLine)||1)*lineScale),thick=Math.max(1,(parseFloat(rootStyles.getPropertyValue('--thick-line-width'))||Number(fontSettings.thickLine)||3)*lineScale);
+    const thin=Math.max(.2,(parseFloat(rootStyles.getPropertyValue('--thin-line-width'))||1)*lineScale),thick=Math.max(1,(parseFloat(rootStyles.getPropertyValue('--thick-line-width'))||3)*lineScale);
     ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`700 ${Math.floor(cellSize*.48)}px ${rootStyles.getPropertyValue('--board-font-family')||'Arial'}`;
     for(let r=minR;r<=maxR;r++)for(let c=minC;c<=maxC;c++){
@@ -1230,28 +1212,6 @@
     $('fontWeightSelect')?.addEventListener('change', (e) => {
       fontSettings.weight = e.target.value;
       updateFontPreviewCell();
-    });
-
-    $('thinLineRange')?.addEventListener('input', (e) => {
-      fontSettings.thinLine = Number(e.target.value);
-      if ($('thinLineValDisplay')) $('thinLineValDisplay').textContent = `${fontSettings.thinLine}px`;
-      applyFontSettings();
-    });
-
-    $('thickLineRange')?.addEventListener('input', (e) => {
-      fontSettings.thickLine = Number(e.target.value);
-      if ($('thickLineValDisplay')) $('thickLineValDisplay').textContent = `${fontSettings.thickLine}px`;
-      applyFontSettings();
-    });
-
-    $('thinLineColorSelect')?.addEventListener('change', (e) => {
-      fontSettings.thinLineColor = e.target.value;
-      applyFontSettings();
-    });
-
-    $('thickLineColorSelect')?.addEventListener('change', (e) => {
-      fontSettings.thickLineColor = e.target.value;
-      applyFontSettings();
     });
 
     $('saveFontSettingsBtn')?.addEventListener('click', () => {

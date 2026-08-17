@@ -153,6 +153,8 @@
     $('noticeNextBtn').textContent = config.notice.nextLabel;
     configureNoticeLink($('noticeButtonA'), item?.buttonA, config.notice.buttonALabel, 'primary');
     configureNoticeLink($('noticeButtonB'), item?.buttonB, config.notice.buttonBLabel, 'secondary');
+    const hasActions = !$('noticeButtonA')?.hidden || !$('noticeButtonB')?.hidden;
+    actions.classList.toggle('has-actions', hasActions);
     actions.classList.remove('is-visible');
     media.classList.add('hidden');
     media.classList.remove('is-revealed');
@@ -202,8 +204,10 @@
     }
     media.classList.remove('hidden');
     requestAnimationFrame(() => media.classList.add('is-revealed'));
-    const delay = item.media.type === 'video' ? 5000 : 2000;
-    noticeState.timer = setTimeout(() => actions.classList.add('is-visible'), delay);
+    if (actions.classList.contains('has-actions')) {
+      const delay = item.media.type === 'video' ? 5000 : 2000;
+      noticeState.timer = setTimeout(() => actions.classList.add('is-visible'), delay);
+    }
   }
 
   function moveNoticeItem(delta) {

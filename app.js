@@ -2,7 +2,6 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const API_BASE_URL = 'https://sudoku-api.miriqbalhub.workers.dev/'.replace(/\/+$/,'');
-  const SHARE_SITE_URL = 'https://sudokubro.miriqbalhub.workers.dev/';
   const state = {
     puzzle: null,
     givens: Array(81).fill(0),
@@ -506,7 +505,7 @@
     // must not overwrite the settings that are active for this puzzle during the session.
     const coords=state.puzzle.map.coords,minR=Math.min(...coords.map(x=>x[0])),maxR=Math.max(...coords.map(x=>x[0])),minC=Math.min(...coords.map(x=>x[1])),maxC=Math.max(...coords.map(x=>x[1]));
     const width=maxC-minC+1,height=maxR-minR+1;
-    const lineScale=state.puzzle.mode==='multi_grid'?Math.max(0.55,Math.min(1,9/Math.max(width,height))):1;
+    const lineScale=Math.max(0.55,Math.min(1.45,9/Math.max(1,width,height)));
     board.style.setProperty('--line-scale',lineScale.toFixed(3));
     if(state.puzzle.mode==='multi_grid'){const available=Math.max(260,board.parentElement?.clientWidth||840),cellSize=Math.min(48,available/width);board.style.width=`${width*cellSize}px`;board.style.height=`${height*cellSize}px`;board.style.gridTemplateColumns=`repeat(${width},${cellSize}px)`;board.style.gridTemplateRows=`repeat(${height},${cellSize}px)`}else{board.style.width='';board.style.height='';board.style.gridTemplateColumns='repeat(9,minmax(0,1fr))';board.style.gridTemplateRows='repeat(9,minmax(0,1fr))'}
     
@@ -532,67 +531,6 @@
     highlight();
     updateStats();
     if(state.fsActive) requestAnimationFrame(applyFsTransform);
-  }
-
-  async function createBoardSnapshot(){
-    if(!state.puzzle)return null;
-    const coords=state.puzzle.map.coords;
-    const minR=Math.min(...coords.map(x=>x[0])),maxR=Math.max(...coords.map(x=>x[0])),minC=Math.min(...coords.map(x=>x[1])),maxC=Math.max(...coords.map(x=>x[1]));
-    const cols=maxC-minC+1,rows=maxR-minR+1,cellSize=Math.max(44,Math.min(96,Math.floor(900/Math.max(cols,rows))));
-    const padding=Math.max(10,Math.round(Math.max(cols,rows)*cellSize*.03));
-    const canvas=document.createElement('canvas');canvas.width=cols*cellSize+padding*2;canvas.height=rows*cellSize+padding*2;
-    const ctx=canvas.getContext('2d');if(!ctx)return null;
-    const rootStyles=getComputedStyle(document.documentElement),thinColor=rootStyles.getPropertyValue('--thin-line-color').trim()||'#cbd5e1',thickColor=rootStyles.getPropertyValue('--thick-line-color').trim()||'#0f172a',givenColor=rootStyles.getPropertyValue('--given').trim()||'#0f172a',entryColor=rootStyles.getPropertyValue('--entry').trim()||'#2563eb';
-    const lineScale=state.puzzle.mode==='multi_grid'?Math.max(.55,Math.min(1,9/Math.max(cols,rows))):1;
-    const thin=Math.max(.2,(parseFloat(rootStyles.getPropertyValue('--thin-line-width'))||1)*lineScale),thick=Math.max(1,(parseFloat(rootStyles.getPropertyValue('--thick-line-width'))||3)*lineScale);
-    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`700 ${Math.floor(cellSize*.48)}px ${rootStyles.getPropertyValue('--board-font-family')||'Arial'}`;
-    for(let r=minR;r<=maxR;r++)for(let c=minC;c<=maxC;c++){
-      const index=state.puzzle.map.coordIndex.get(`${r},${c}`);if(index===undefined)continue;
-      const x=padding+(c-minC)*cellSize,y=padding+(r-minR)*cellSize,cell=document.querySelector(`.cell[data-index="${index}"]`);
-      const bg=cell?.dataset.constraintColor||'#ffffff';ctx.fillStyle=bg;ctx.fillRect(x,y,cellSize,cellSize);
-      const value=state.givens[index]||state.values[index]||'';if(value){ctx.fillStyle=state.givens[index]?givenColor:entryColor;ctx.fillText(String(value),x+cellSize/2,y+cellSize/2)}
-      ctx.strokeStyle=thinColor;ctx.lineWidth=thin;ctx.strokeRect(x+thin/2,y+thin/2,cellSize-thin,cellSize-thin);
-    }
-    ctx.strokeStyle=thickColor;ctx.lineWidth=thick;
-    for(let r=minR;r<=maxR;r++)for(let c=minC;c<=maxC;c++){
-      const index=state.puzzle.map.coordIndex.get(`${r},${c}`);if(index===undefined)continue;const owners=state.puzzle.owners[index]||[],x=padding+(c-minC)*cellSize,y=padding+(r-minR)*cellSize;
-      if(owners.some(o=>o.lc===2||o.lc===5)){ctx.beginPath();ctx.moveTo(x+cellSize,y);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke()}
-      if(owners.some(o=>o.lr===2||o.lr===5)){ctx.beginPath();ctx.moveTo(x,y+cellSize);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke()}
-      if(state.puzzle.mode==='multi_grid'){
-        const has=(rr,cc)=>state.puzzle.map.coordIndex.has(`${rr},${cc}`);
-        if(owners.some(o=>o.lc===0)&&!has(r,c-1)){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+cellSize);ctx.stroke()}
-        if(owners.some(o=>o.lc===8)&&!has(r,c+1)){ctx.beginPath();ctx.moveTo(x+cellSize,y);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke()}
-        if(owners.some(o=>o.lr===0)&&!has(r-1,c)){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+cellSize,y);ctx.stroke()}
-        if(owners.some(o=>o.lr===8)&&!has(r+1,c)){ctx.beginPath();ctx.moveTo(x,y+cellSize);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke()}
-      }
-    }
-    return new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-  }
-
-  function getShareExtraColorMessage(){
-    if(!state.puzzle?.owners)return '';
-    const labels=[];
-    state.puzzle.owners.forEach((ownerList,index)=>ownerList.forEach(owner=>{if(ownerColor(owner,index))labels.push(owner.customShadingName||owner.label||prettyConstraint(owner.type))}));
-    const unique=[...new Set(labels.filter(Boolean))];
-    return unique.length?`Extra colour used: ${unique.join(', ')}. Role: coloured cells mark an additional no-repeat region; repeated numbers inside that region are invalid.`:'';
-  }
-
-  async function sharePuzzle(){
-    if(!state.puzzle){toast('Select a puzzle before sharing.');return}
-    const code=state.currentPuzzleCode||'CUSTOM',extraColor=getShareExtraColorMessage(),text=[`Sudoku puzzle ${code}`,extraColor,SHARE_SITE_URL].filter(Boolean).join('\n');
-    let blob=null;try{blob=await createBoardSnapshot()}catch(_){blob=null}
-    const file=blob?new File([blob],`sudoku-${code}.png`,{type:'image/png'}):null;
-    if(navigator.share){
-      try{
-        const shareData={title:`Sudoku ${code}`,text,url:SHARE_SITE_URL};
-        if(file&&(!navigator.canShare||navigator.canShare({files:[file]})))shareData.files=[file];
-        await navigator.share(shareData);toast('Puzzle shared.');return;
-      }catch(err){if(err?.name==='AbortError')return}
-    }
-    try{await navigator.clipboard.writeText(text)}catch(_){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
-    if(blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`sudoku-${code}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-    toast(blob?'Share text copied; board snapshot downloaded.':'Share text copied.');
   }
 
   function select(i){
@@ -1078,7 +1016,6 @@
     $('resetBtn')?.addEventListener('click', reset);
     $('solveBtn')?.addEventListener('click', toggleSolution);
     $('fullscreenBtn')?.addEventListener('click', toggleFullscreen);
-    $('shareBtn')?.addEventListener('click', sharePuzzle);
 
     /* Fullscreen Viewport Controls */
     $('fsExitBtn')?.addEventListener('click', exitFullscreen);

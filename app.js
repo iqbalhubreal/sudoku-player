@@ -218,7 +218,8 @@
   function toast(message){const el=$('toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),1500)}
   function validCode(code){return /^[A-Z]\d{4}$/.test(code)}
 
-  function currentProgressRecord(){if(!state.currentPuzzleCode||!state.puzzle)return null;return {code:state.currentPuzzleCode,values:[...state.values],notes:state.notes.map(set=>[...set]),elapsed:state.elapsed,mistakes:state.mistakes,status:state.status,updatedAt:Date.now()}}
+  function liveElapsed(){if(!state.startedAt||state.finished)return Math.max(0,state.elapsed);return Math.max(state.elapsed,Math.floor((Date.now()-state.startedAt)/1000));}
+  function currentProgressRecord(){if(!state.currentPuzzleCode||!state.puzzle)return null;return {code:state.currentPuzzleCode,values:[...state.values],notes:state.notes.map(set=>[...set]),elapsed:liveElapsed(),mistakes:state.mistakes,status:state.status,updatedAt:Date.now()}}
   function hasPlayerEntries(){return Boolean(state.puzzle&&state.values.some((v,i)=>!state.givens[i]&&v));}
   function restoreProgress(progress){if(!progress)return;state.values=Array.from({length:state.puzzle.total},(_,i)=>state.givens[i]?state.givens[i]:num(progress.values?.[i]));state.notes=Array.from({length:state.puzzle.total},(_,i)=>new Set(Array.isArray(progress.notes?.[i])?progress.notes[i].map(num).filter(Boolean):[]));state.elapsed=hasPlayerEntries()?Math.max(0,Number(progress.elapsed)||0):0;state.mistakes=Math.max(0,Number(progress.mistakes)||0);state.status=['Not Started','In Progress','Solved'].includes(progress.status)?progress.status:(hasPlayerEntries()?'In Progress':'Not Started');if(!hasPlayerEntries()&&state.status!=='Solved')state.status='Not Started';state.finished=state.status==='Solved'}
   function syncStatusAfterChange(){state.finished=false;state.status=isSolved()?'Solved':'In Progress';if(state.status==='Solved')state.finished=true;persistProgress();renderLibrary()}
@@ -368,6 +369,21 @@
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lovdoku-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
   }
 
+  function progressLinkText(){
+    const filled=state.values.reduce((count,value,index)=>count+(!state.givens[index]&&value?1:0),0);
+    const total=state.puzzle?.total||state.values.length;
+    const code=state.currentPuzzleCode||'puzzle';
+    return `Lovdoku progress for ${code}: ${filled}/${total} filled, ${state.mistakes} mistakes, ${formatTime(liveElapsed())} time.\nContinue here: ${window.location.href}`;
+  }
+
+  async function copyProgressLink(){
+    const text=progressLinkText();
+    try{
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return true}
+      const textarea=document.createElement('textarea');textarea.value=text;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const copied=document.execCommand('copy');textarea.remove();return copied;
+    }catch(_){return false}
+  }
+
   async function downloadShareImage(){
     if(!state.puzzle){toast('Choose a puzzle first.');return}
     if(!window.html2canvas){toast('The share image tool is still loading.');return}
@@ -392,7 +408,8 @@
       const url=URL.createObjectURL(blob),a=document.createElement('a');
       a.href=url;a.download=`lovdoku-${state.currentPuzzleCode||'puzzle'}-share.jpg`;a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
-      toast('Share image downloaded.');
+      const copied=await copyProgressLink();
+      toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.');
     }catch(err){
       console.error('Share image download failed',err);
       toast('Could not create the share image.');
@@ -567,6 +584,7 @@
 
   function select(i){
     if(!state.puzzle)return;
+    if(hasPlayerEntries()&&!state.finished&&!state.timer)startTimer();
     if(state.selected===i){
       state.selected=-1;
       render();
@@ -659,16 +677,21 @@
 
   function startTimer(){
     stopTimer();
+    if(!state.puzzle||state.finished)return;
+    if(!state.startedAt)state.startedAt=Date.now()-Math.max(0,state.elapsed)*1000;
     state.timer=setInterval(()=>{
-      if(!state.finished && state.puzzle){
-        state.elapsed++;
+      if(!state.finished&&state.puzzle){
+        state.elapsed=liveElapsed();
         $('timerStat').textContent=formatTime(state.elapsed);
+        persistProgress();
       }
     },1000);
   }
 
   function stopTimer(){
     if(state.timer){
+      state.elapsed=liveElapsed();
+      persistProgress();
       clearInterval(state.timer);
       state.timer=null;
     }
@@ -968,7 +991,7 @@
     renderMetadata();
     render();
     setStatusFromState();
-    if(hasPlayerEntries()&&!state.finished) startTimer();
+    $('timerStat').textContent=formatTime(state.elapsed);
 
     if(state.fsActive) {
       updateFsTitle();
@@ -1031,6 +1054,10 @@
         exitFullscreen();
       }
     });
+
+    const saveTimerSnapshot=()=>{if(state.puzzle&&hasPlayerEntries()&&!state.finished){state.elapsed=liveElapsed();persistProgress()}};
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveTimerSnapshot()});
+    window.addEventListener('pagehide',saveTimerSnapshot);
 
     const keypad = $('keypad');
     if (keypad) {

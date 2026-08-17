@@ -132,6 +132,30 @@
     cell.style.fontSize = `${px}px`;
   }
 
+  function resetBoardAppearance() {
+    document.documentElement.style.removeProperty('--given');
+    document.documentElement.style.removeProperty('--entry');
+    applyFontSettings();
+  }
+
+  function applyPuzzleAppearance(puzzle) {
+    const colors = puzzle?.colors || {};
+    const settings = puzzle?.settings || {};
+    if (colors.gridLine) document.documentElement.style.setProperty('--thick-line-color', colors.gridLine);
+    if (colors.puzzleNumbers) document.documentElement.style.setProperty('--given', colors.puzzleNumbers);
+    if (colors.solutionNumbers) document.documentElement.style.setProperty('--entry', colors.solutionNumbers);
+    if (settings.lineColor) {
+      document.documentElement.style.setProperty('--thin-line-color', settings.lineColor);
+      document.documentElement.style.setProperty('--thick-line-color', settings.lineColor);
+    }
+    if (settings.puzzleNumberColor) document.documentElement.style.setProperty('--given', settings.puzzleNumberColor);
+    if (settings.solutionNumberColor) document.documentElement.style.setProperty('--entry', settings.solutionNumberColor);
+    if (Number.isFinite(Number(settings.thinLineWidth))) document.documentElement.style.setProperty('--thin-line-width', `${Number(settings.thinLineWidth)}px`);
+    if (Number.isFinite(Number(settings.thickLineWidth))) document.documentElement.style.setProperty('--thick-line-width', `${Number(settings.thickLineWidth)}px`);
+    if (settings.thinLineColor) document.documentElement.style.setProperty('--thin-line-color', settings.thinLineColor);
+    if (settings.thickLineColor) document.documentElement.style.setProperty('--thick-line-color', settings.thickLineColor);
+  }
+
   function readStorage(key,fallback){try{const value=JSON.parse(localStorage.getItem(key)||'null');return value??fallback}catch(_){return fallback}}
   function writeStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(_){return false}}
   function getProgressStore(){const value=readStorage(STORAGE_KEYS.progress,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
@@ -496,7 +520,8 @@
   function render(){
     if(!state.puzzle)return;
     const board=$('board');board.innerHTML='';board.classList.toggle('multi',state.puzzle.mode==='multi_grid');
-    const colors=state.puzzle.colors||{},settings=state.puzzle.settings||{};if(colors.gridLine)document.documentElement.style.setProperty('--thick-line-color',colors.gridLine);if(colors.puzzleNumbers)document.documentElement.style.setProperty('--given',colors.puzzleNumbers);if(colors.solutionNumbers)document.documentElement.style.setProperty('--entry',colors.solutionNumbers);if(settings.lineColor){document.documentElement.style.setProperty('--thin-line-color',settings.lineColor);document.documentElement.style.setProperty('--thick-line-color',settings.lineColor)}if(settings.puzzleNumberColor)document.documentElement.style.setProperty('--given',settings.puzzleNumberColor);if(settings.solutionNumberColor)document.documentElement.style.setProperty('--entry',settings.solutionNumberColor);if(Number.isFinite(Number(settings.thinLineWidth)))document.documentElement.style.setProperty('--thin-line-width',`${Number(settings.thinLineWidth)}px`);if(Number.isFinite(Number(settings.thickLineWidth)))document.documentElement.style.setProperty('--thick-line-width',`${Number(settings.thickLineWidth)}px`);if(settings.thinLineColor)document.documentElement.style.setProperty('--thin-line-color',settings.thinLineColor);if(settings.thickLineColor)document.documentElement.style.setProperty('--thick-line-color',settings.thickLineColor);
+    // Appearance is applied once when a puzzle is loaded. Re-rendering for cell selection or input
+    // must not overwrite the settings that are active for this puzzle during the session.
     const coords=state.puzzle.map.coords,minR=Math.min(...coords.map(x=>x[0])),maxR=Math.max(...coords.map(x=>x[0])),minC=Math.min(...coords.map(x=>x[1])),maxC=Math.max(...coords.map(x=>x[1]));
     const width=maxC-minC+1,height=maxR-minR+1;
     const lineScale=state.puzzle.mode==='multi_grid'?Math.max(0.55,Math.min(1,9/Math.max(width,height))):1;
@@ -537,7 +562,7 @@
     const ctx=canvas.getContext('2d');if(!ctx)return null;
     const rootStyles=getComputedStyle(document.documentElement),thinColor=rootStyles.getPropertyValue('--thin-line-color').trim()||'#cbd5e1',thickColor=rootStyles.getPropertyValue('--thick-line-color').trim()||'#0f172a',givenColor=rootStyles.getPropertyValue('--given').trim()||'#0f172a',entryColor=rootStyles.getPropertyValue('--entry').trim()||'#2563eb';
     const lineScale=state.puzzle.mode==='multi_grid'?Math.max(.55,Math.min(1,9/Math.max(cols,rows))):1;
-    const thin=Math.max(.2,(Number(state.puzzle.settings?.thinLineWidth)||Number(fontSettings.thinLine)||1)*lineScale),thick=Math.max(1,(Number(state.puzzle.settings?.thickLineWidth)||Number(fontSettings.thickLine)||3)*lineScale);
+    const thin=Math.max(.2,(parseFloat(rootStyles.getPropertyValue('--thin-line-width'))||Number(fontSettings.thinLine)||1)*lineScale),thick=Math.max(1,(parseFloat(rootStyles.getPropertyValue('--thick-line-width'))||Number(fontSettings.thickLine)||3)*lineScale);
     ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`700 ${Math.floor(cellSize*.48)}px ${rootStyles.getPropertyValue('--board-font-family')||'Arial'}`;
     for(let r=minR;r<=maxR;r++)for(let c=minC;c<=maxC;c++){
@@ -970,6 +995,8 @@
     state.currentPuzzleRecord = record || null;
     state.status = 'Not Started';
 
+    resetBoardAppearance();
+    applyPuzzleAppearance(parsed);
     resetSolutionButtonState();
 
     if(progress){
@@ -1000,19 +1027,18 @@
   function setupEventListeners() {
     document.addEventListener('pointerdown', (e) => {
       if (state.selected === -1) return;
-      
+
       const board = $('board');
       const keypad = $('keypad');
       const notesToggle = $('notesToggle');
-      const settingsModal = $('settingsModal');
-      const fsOverlay = $('fullscreenOverlay');
-      
+
       if (board && board.contains(e.target)) return;
+      // These controls operate on the selected cell; keep the selection long enough for
+      // their click handlers to complete. Every other screen/fullscreen surface is outside
+      // the grid and clears the selection immediately.
       if (keypad && keypad.contains(e.target)) return;
       if (notesToggle && notesToggle.contains(e.target)) return;
-      if (settingsModal && settingsModal.contains(e.target)) return;
-      if (fsOverlay && fsOverlay.classList.contains('active') && e.target.closest('.fs-header')) return;
-      
+
       state.selected = -1;
       render();
     });
@@ -1241,6 +1267,7 @@
     });
 
     $('noticeNextBtn')?.addEventListener('click', () => window.noticeCarousel?.reveal());
+    $('noticeCloseBtn')?.addEventListener('click', () => window.noticeCarousel?.collapse());
     $('noticePrevItemBtn')?.addEventListener('click', () => window.noticeCarousel?.previous());
     $('noticeNextItemBtn')?.addEventListener('click', () => window.noticeCarousel?.next());
 

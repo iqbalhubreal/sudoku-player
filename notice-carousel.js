@@ -151,6 +151,7 @@
     $('noticePanelTitle').textContent = item?.title || config.notice.title;
     $('noticeCopy').textContent = item?.copy || config.notice.copy;
     $('noticeNextBtn').textContent = config.notice.nextLabel;
+    $('noticeCloseBtn')?.classList.add('hidden');
     configureNoticeLink($('noticeButtonA'), item?.buttonA, config.notice.buttonALabel, 'primary');
     configureNoticeLink($('noticeButtonB'), item?.buttonB, config.notice.buttonBLabel, 'secondary');
     actions.classList.remove('is-visible');
@@ -177,6 +178,7 @@
     clearNoticeTimer();
     noticeState.revealed = true;
     $('noticeNextBtn').textContent = noticeState.config.notice.replayLabel;
+    $('noticeCloseBtn')?.classList.remove('hidden');
     media.replaceChildren();
     const src = item.media.src;
     const usableSrc = src && !src.includes('PLACEHOLDER');
@@ -210,6 +212,11 @@
     const nextIndex = noticeState.index + delta;
     if (nextIndex < 0 || nextIndex >= noticeState.config.items.length) return;
     noticeState.index = nextIndex;
+    renderNoticeItem();
+  }
+
+  function collapseNoticeMedia() {
+    if (!noticeState.revealed) return;
     renderNoticeItem();
   }
 
@@ -253,6 +260,7 @@
     reveal: revealNoticeMedia,
     previous: () => moveNoticeItem(-1),
     next: () => moveNoticeItem(1),
+    collapse: collapseNoticeMedia,
     setConfig: setNoticeConfig
   };
 })();

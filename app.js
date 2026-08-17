@@ -368,6 +368,40 @@
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lovdoku-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
   }
 
+  async function downloadShareImage(){
+    if(!state.puzzle){toast('Choose a puzzle first.');return}
+    if(!window.html2canvas){toast('The share image tool is still loading.');return}
+    const layout=document.querySelector('main.layout');
+    const footer=document.querySelector('.footer');
+    const button=$('shareBtn');
+    if(!layout||!footer)return;
+    if(state.fsActive){toast('Exit fullscreen before downloading the share image.');return}
+    if(button){button.disabled=true;button.textContent='Preparing…'}
+    const stage=document.createElement('div');
+    const captureWidth=Math.max(900,Math.min(1200,document.documentElement.clientWidth||1200));
+    stage.className='share-capture-stage';
+    stage.style.width=`${captureWidth}px`;
+    stage.append(layout.cloneNode(true),footer.cloneNode(true));
+    stage.querySelector('#shareBtn')?.remove();
+    document.body.appendChild(stage);
+    try{
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1.35,useCORS:true,allowTaint:false,logging:false,imageTimeout:0});
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
+      if(!blob)throw new Error('Image creation failed.');
+      const url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download=`lovdoku-${state.currentPuzzleCode||'puzzle'}-share.jpg`;a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+      toast('Share image downloaded.');
+    }catch(err){
+      console.error('Share image download failed',err);
+      toast('Could not create the share image.');
+    }finally{
+      stage.remove();
+      if(button){button.disabled=false;button.textContent='⇩ Share'}
+    }
+  }
+
   async function importProgressFile(file){
     try{
       const text=await file.text();const data=JSON.parse(text);const incoming=data?.progress&&typeof data.progress==='object'?data.progress:data;
@@ -1087,6 +1121,7 @@
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
+    $('shareBtn')?.addEventListener('click', downloadShareImage);
 
     $('gridTypeFilter')?.addEventListener('change', updateGridCountOptions);
 

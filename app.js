@@ -215,7 +215,7 @@
 
   function isRecentRequest(reset){return Boolean(reset&&!$('difficultyFilter').value&&!$('gridTypeFilter').value&&!$('gridCountFilter').value&&!$('constraintFilter').value.trim())}
   function normalizeCode(value){return String(value||'').trim().toUpperCase()}
-  function toast(message){const el=$('toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),1500)}
+  function toast(message,duration=1500){const el=$('toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),duration)}
   function validCode(code){return /^[A-Z]\d{4}$/.test(code)}
 
   function liveElapsed(){if(!state.startedAt||state.finished)return Math.max(0,state.elapsed);return Math.max(state.elapsed,Math.floor((Date.now()-state.startedAt)/1000));}
@@ -436,10 +436,10 @@
       const blob=await encodeShareImage(canvas);
       if(!blob)throw new Error('Image creation failed.');
       const url=URL.createObjectURL(blob),a=document.createElement('a');
-      a.href=url;a.download=`lovdoku-${state.currentPuzzleCode||'puzzle'}-share.jpg`;a.click();
+      a.href=url;a.download=`${state.currentPuzzleCode||'puzzle'}.jpg`;a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
       const copied=await copyPromise;
-      toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.');
+      toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.',3500);
     }catch(err){
       console.error('Share image download failed',err);
       toast('Could not create the share image.');

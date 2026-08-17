@@ -371,7 +371,8 @@
 
   function progressLinkText(){
     const code=state.currentPuzzleCode||'puzzle';
-    return `${code}\n${window.location.href}`;
+    const siteUrl=`${window.location.origin}/`;
+    return `Puzzle Number: ${code}\nLink: ${siteUrl}`;
   }
 
   async function copyProgressLink(){
@@ -393,16 +394,16 @@
     if(button){button.disabled=true;button.textContent='Preparing…'}
     const copyPromise=copyProgressLink();
     const stage=document.createElement('div');
-    const captureWidth=Math.max(800,Math.min(1000,document.documentElement.clientWidth||1000));
+    const captureWidth=Math.max(900,Math.min(1200,document.documentElement.clientWidth||1200));
     stage.className='share-capture-stage';
     stage.style.width=`${captureWidth}px`;
     stage.append(layout.cloneNode(true),footer.cloneNode(true));
     stage.querySelector('#shareBtn')?.remove();
     document.body.appendChild(stage);
     try{
-      await new Promise(resolve=>requestAnimationFrame(resolve));
-      const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1,useCORS:true,allowTaint:false,logging:false,imageTimeout:3000});
-      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.8));
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1.35,useCORS:true,allowTaint:false,logging:false,imageTimeout:0});
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
       if(!blob)throw new Error('Image creation failed.');
       const url=URL.createObjectURL(blob),a=document.createElement('a');
       a.href=url;a.download=`lovdoku-${state.currentPuzzleCode||'puzzle'}-share.jpg`;a.click();

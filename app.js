@@ -1266,8 +1266,7 @@
       toast('Font settings reset.');
     });
 
-    $('noticeNextBtn')?.addEventListener('click', () => window.noticeCarousel?.reveal());
-    $('noticeCloseBtn')?.addEventListener('click', () => window.noticeCarousel?.collapse());
+    $('noticeNextBtn')?.addEventListener('click', () => window.noticeCarousel?.toggle());
     $('noticePrevItemBtn')?.addEventListener('click', () => window.noticeCarousel?.previous());
     $('noticeNextItemBtn')?.addEventListener('click', () => window.noticeCarousel?.next());
 

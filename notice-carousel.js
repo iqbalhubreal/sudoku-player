@@ -151,7 +151,6 @@
     $('noticePanelTitle').textContent = item?.title || config.notice.title;
     $('noticeCopy').textContent = item?.copy || config.notice.copy;
     $('noticeNextBtn').textContent = config.notice.nextLabel;
-    $('noticeCloseBtn')?.classList.add('hidden');
     configureNoticeLink($('noticeButtonA'), item?.buttonA, config.notice.buttonALabel, 'primary');
     configureNoticeLink($('noticeButtonB'), item?.buttonB, config.notice.buttonBLabel, 'secondary');
     actions.classList.remove('is-visible');
@@ -177,8 +176,7 @@
     if (!item || !media) return;
     clearNoticeTimer();
     noticeState.revealed = true;
-    $('noticeNextBtn').textContent = noticeState.config.notice.replayLabel;
-    $('noticeCloseBtn')?.classList.remove('hidden');
+    $('noticeNextBtn').textContent = 'CLOSE';
     media.replaceChildren();
     const src = item.media.src;
     const usableSrc = src && !src.includes('PLACEHOLDER');
@@ -261,6 +259,7 @@
     previous: () => moveNoticeItem(-1),
     next: () => moveNoticeItem(1),
     collapse: collapseNoticeMedia,
+    toggle: () => (noticeState.revealed ? collapseNoticeMedia() : revealNoticeMedia()),
     setConfig: setNoticeConfig
   };
 })();

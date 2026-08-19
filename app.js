@@ -392,7 +392,6 @@
       const cachedRecord=record.puzzle?record:{...(cachedPayload.record||{}),...record,puzzle_number:code};
       load(puzzle,{code,record:cachedRecord,progress:getProgress(code)});
       document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
-      toast('Playing the saved offline copy.');
       return;
     }
     try{
@@ -408,7 +407,6 @@
         const cachedRecord={puzzle_number:code,...(cached.record||record)};
         load(cached.puzzle,{code,record:cachedRecord,progress:getProgress(code)});
         document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
-        toast('Playing the saved offline copy.');
         return;
       }
       if(err.status===404){

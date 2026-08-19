@@ -36,6 +36,48 @@
     fsPinchStartDistance: 0,
     fsPinchStartZoom: 1
   };
+
+  let deferredInstallPrompt = null;
+
+  function setInstallButtonVisible(visible) {
+    const button = $('installAppBtn');
+    if (!button) return;
+    button.classList.toggle('hidden', !visible);
+  }
+
+  function setupPwa() {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {
+          // The app remains fully usable if service-worker registration is unavailable.
+        });
+      }, { once: true });
+    }
+
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      setInstallButtonVisible(true);
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      setInstallButtonVisible(false);
+      toast('Lovdoku was installed successfully.');
+    });
+
+    $('installAppBtn')?.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) {
+        toast('Use your browser menu to install Lovdoku.');
+        return;
+      }
+      setInstallButtonVisible(false);
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+    });
+  }
+
   const STORAGE_KEYS = {
     progress: 'lovdoku.progress.v1',
     recentPuzzles: 'lovdoku.recent-puzzles.v1',
@@ -1273,6 +1315,7 @@
   }
 
   function init() {
+    setupPwa();
     loadFontSettings();
     setupEventListeners();
     window.noticeCarousel?.initialize();

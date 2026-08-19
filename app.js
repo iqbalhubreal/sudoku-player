@@ -247,6 +247,33 @@
   function getFreshLibrarySnapshot(){const snapshot=readStorage(STORAGE_KEYS.librarySnapshot,null);if(!snapshot||snapshot.dayKey!==currentDayKey()||Date.now()-Number(snapshot.fetchedAt||0)>LIBRARY_CACHE_TTL_MS||!Array.isArray(snapshot.items)||!snapshot.items.length)return null;return snapshot}
   function cacheLibrarySnapshot(items,offset,hasMore,nextOffset){const compactItems=(items||[]).map(({puzzle,...record})=>record);writeStorage(STORAGE_KEYS.librarySnapshot,{dayKey:currentDayKey(),fetchedAt:Date.now(),items:compactItems,offset,hasMore,nextOffset})}
   function cacheBatchPuzzlePayloads(items){(items||[]).forEach(item=>{const code=puzzleCodeOf(item);if(code&&item?.puzzle)cachePuzzlePayload(code,item.puzzle,item)})}
+  function getLoadedBatchRecords(){
+    const snapshot=getFreshLibrarySnapshot();
+    const candidates=[...(snapshot?.items||[]),...(Array.isArray(libraryItems)?libraryItems:[])];
+    const seen=new Set();
+    return candidates.map(record=>{
+      const code=puzzleCodeOf(record);
+      if(!code||seen.has(code))return null;
+      seen.add(code);
+      const cached=getCachedPuzzlePayload(code);
+      return record?.puzzle||!cached?.puzzle?record:{...record,puzzle:cached.puzzle};
+    }).filter(Boolean);
+  }
+  function matchesLibraryFilters(record){
+    const difficulty=$('difficultyFilter').value;
+    const gridType=$('gridTypeFilter').value;
+    const gridCount=$('gridCountFilter').value;
+    const constraint=$('constraintFilter').value.trim().toLowerCase();
+    return (!difficulty||record.difficulty===difficulty)&&(!gridType||record.grid_type===gridType)&&(!gridCount||String(record.grid_count||1)===String(gridCount))&&(!constraint||String(record.constraint_type||'').toLowerCase().includes(constraint));
+  }
+  function applyFiltersLocalFirst(){
+    const candidates=getLoadedBatchRecords();
+    if(!candidates.length){fetchLibrary({reset:true});return}
+    const hasFilter=Boolean($('difficultyFilter').value||$('gridTypeFilter').value||$('gridCountFilter').value||$('constraintFilter').value.trim());
+    const matches=candidates.filter(matchesLibraryFilters);
+    if(!matches.length&&hasFilter){fetchLibrary({reset:true});return}
+    showingLiked=false;libraryItems=matches;libraryOffset=matches.length;libraryHasMore=false;libraryVisibleCount=LIBRARY_PAGE_SIZE;renderLibrary();$('libraryStatus').textContent=matches.length?`${Math.min(libraryVisibleCount,matches.length)} of ${matches.length} loaded puzzle${matches.length===1?'':'s'} match.`:'No puzzles match these filters.';updateLoadMoreButton();
+  }
   function updateLoadMoreButton(){const button=$('loadMoreBtn');if(!button)return;const selectedStatus=$('statusFilter')?.value||'';const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;const canReveal=!showingLiked&&filteredCount>libraryVisibleCount;const canFetch=!showingLiked&&libraryHasMore;button.classList.toggle('hidden',!(canReveal||canFetch));button.disabled=libraryLoading}
   function renderCachedLibraryImmediately(){
     const snapshot=getFreshLibrarySnapshot();
@@ -369,6 +396,10 @@
     showingLiked=false;
     $('libraryStatus').textContent='Searching…';
     $('libraryList').innerHTML='';$('libraryEmpty').classList.add('hidden');$('loadMoreBtn').classList.add('hidden');
+    const localRecord=getLoadedBatchRecords().find(record=>puzzleCodeOf(record)===code&&record?.puzzle);
+    if(localRecord){
+      libraryItems=[localRecord];libraryOffset=1;libraryHasMore=false;libraryVisibleCount=1;renderLibrary();$('libraryStatus').textContent='1 puzzle found in the loaded batch.';$('libraryEmpty').classList.add('hidden');return;
+    }
     try{
       const data=await apiFetch(`/puzzles/${encodeURIComponent(code)}`);
       const searchRecord={puzzle_number:data.puzzleNumber,...data.metadata,puzzle:data.puzzle};
@@ -1236,7 +1267,7 @@
     }
 
     $('searchPuzzleBtn')?.addEventListener('click', searchPuzzle);
-    $('applyFiltersBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
+    $('applyFiltersBtn')?.addEventListener('click', applyFiltersLocalFirst);
     $('loadMoreBtn')?.addEventListener('click', handleLoadMore);
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);

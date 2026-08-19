@@ -83,11 +83,16 @@
     recentPuzzles: 'lovdoku.recent-puzzles.v1',
     likedPuzzles: 'lovdoku.liked-puzzles.v1',
     puzzleCache: 'lovdoku.puzzle-cache.v1',
+    librarySnapshot: 'lovdoku.library-snapshot.v1',
     fontSettings: 'lovdoku.font-settings.v1'
   };
   const RECENT_CACHE_LIMIT = 5;
+  const LIBRARY_BATCH_LIMIT = 25;
+  const LIBRARY_PAGE_SIZE = 5;
+  const LIBRARY_CACHE_TTL_MS = 15 * 60 * 1000;
   let libraryItems = [];
   let libraryOffset = 0;
+  let libraryVisibleCount = LIBRARY_PAGE_SIZE;
   let libraryHasMore = false;
   let libraryLoading = false;
   let showingLiked = false;
@@ -238,20 +243,20 @@
   function getPuzzleCache(){const value=readStorage(STORAGE_KEYS.puzzleCache,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getCachedPuzzlePayload(code){return getPuzzleCache()[normalizeCode(code)]||null}
   function cachePuzzlePayload(code,puzzle,record){if(!code||!puzzle)return;const cache=getPuzzleCache();cache[normalizeCode(code)]={code:normalizeCode(code),record:{...(record||{}),puzzle_number:normalizeCode(code)},puzzle,updatedAt:Date.now()};writeStorage(STORAGE_KEYS.puzzleCache,cache)}
-  async function preloadPuzzlePayloads(items){const missing=(items||[]).filter(item=>puzzleCodeOf(item)&&!getCachedPuzzlePayload(puzzleCodeOf(item)));await Promise.allSettled(missing.slice(0,RECENT_CACHE_LIMIT).map(async item=>{try{const data=await apiFetch(`/puzzles/${encodeURIComponent(puzzleCodeOf(item))}`);cachePuzzlePayload(data.puzzleNumber||puzzleCodeOf(item),data.puzzle,{puzzle_number:data.puzzleNumber||puzzleCodeOf(item),...(data.metadata||item)})}catch(_){}}))}
+  function currentDayKey(){return new Date().toISOString().slice(0,10)}
+  function getFreshLibrarySnapshot(){const snapshot=readStorage(STORAGE_KEYS.librarySnapshot,null);if(!snapshot||snapshot.dayKey!==currentDayKey()||Date.now()-Number(snapshot.fetchedAt||0)>LIBRARY_CACHE_TTL_MS||!Array.isArray(snapshot.items)||!snapshot.items.length)return null;return snapshot}
+  function cacheLibrarySnapshot(items,offset,hasMore,nextOffset){const compactItems=(items||[]).map(({puzzle,...record})=>record);writeStorage(STORAGE_KEYS.librarySnapshot,{dayKey:currentDayKey(),fetchedAt:Date.now(),items:compactItems,offset,hasMore,nextOffset})}
+  function cacheBatchPuzzlePayloads(items){(items||[]).forEach(item=>{const code=puzzleCodeOf(item);if(code&&item?.puzzle)cachePuzzlePayload(code,item.puzzle,item)})}
+  function updateLoadMoreButton(){const button=$('loadMoreBtn');if(!button)return;const selectedStatus=$('statusFilter')?.value||'';const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;const canReveal=!showingLiked&&filteredCount>libraryVisibleCount;const canFetch=!showingLiked&&libraryHasMore;button.classList.toggle('hidden',!(canReveal||canFetch));button.disabled=libraryLoading}
   function renderCachedLibraryImmediately(){
-    const cached=getCachedRecentPuzzles();
-    if(!cached.length)return false;
-    const hydrated=cached.map(record=>{
-      const code=puzzleCodeOf(record),payload=getCachedPuzzlePayload(code);
-      return payload?.puzzle ? {...record,...(payload.record||{}),puzzle_number:code,puzzle:payload.puzzle} : record;
-    });
-    libraryItems=hydrated;
-    libraryOffset=hydrated.length;
-    libraryHasMore=false;
-    renderLibrary(hydrated);
-    $('libraryStatus').textContent=`${hydrated.length} saved puzzle${hydrated.length===1?'':'s'} ready — refreshing…`;
-    $('loadMoreBtn').classList.add('hidden');
+    const snapshot=getFreshLibrarySnapshot();
+    if(!snapshot)return false;
+    libraryItems=snapshot.items;
+    libraryOffset=Number(snapshot.offset||snapshot.items.length);
+    libraryHasMore=Boolean(snapshot.hasMore);
+    libraryVisibleCount=LIBRARY_PAGE_SIZE;
+    renderLibrary();
+    $('libraryStatus').textContent=`${Math.min(libraryVisibleCount,libraryItems.length)} of ${libraryItems.length} saved puzzles ready.`;
     return true;
   }
 
@@ -284,7 +289,8 @@
 
   function renderLibrary(itemsOverride=null,append=false){
     const selectedStatus=$('statusFilter').value;
-    const items=(itemsOverride??libraryItems).filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus);
+    const filtered=(itemsOverride??libraryItems).filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus);
+    const items=showingLiked?filtered:filtered.slice(0,libraryVisibleCount);
     const list=$('libraryList');
     if(!append) list.innerHTML='';
     if(!items.length&&!append){$('libraryEmpty').classList.remove('hidden');$('loadMoreBtn').classList.add('hidden');return}
@@ -304,9 +310,18 @@
       }
       item.append(code,main,meta,actions);list.appendChild(item);
     });
+    updateLoadMoreButton();
   }
 
-  function showLikedPuzzles(){showingLiked=true;libraryItems=getLikedPuzzles();libraryOffset=libraryItems.length;libraryHasMore=false;renderLibrary();$('libraryStatus').textContent=libraryItems.length?`${libraryItems.length} liked puzzle${libraryItems.length===1?'':'s'}.`:'No liked puzzles yet.';$('loadMoreBtn').classList.add('hidden')}
+  function showLikedPuzzles(){showingLiked=true;libraryItems=getLikedPuzzles();libraryOffset=libraryItems.length;libraryVisibleCount=libraryItems.length;libraryHasMore=false;renderLibrary();$('libraryStatus').textContent=libraryItems.length?`${libraryItems.length} liked puzzle${libraryItems.length===1?'':'s'}.`:'No liked puzzles yet.'}
+
+  async function handleLoadMore(){
+    if(libraryLoading)return;
+    const selectedStatus=$('statusFilter')?.value||'';
+    const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;
+    if(filteredCount>libraryVisibleCount){libraryVisibleCount+=LIBRARY_PAGE_SIZE;renderLibrary();return}
+    if(libraryHasMore){libraryVisibleCount+=LIBRARY_PAGE_SIZE;await fetchLibrary({reset:false})}
+  }
 
   async function fetchLibrary({reset=true}={}){
     if(libraryLoading)return;
@@ -315,7 +330,8 @@
     libraryLoading=true;$('applyFiltersBtn').disabled=true;$('loadMoreBtn').disabled=true;$('libraryStatus').textContent='Loading puzzles…';
     try{
       const params=new URLSearchParams();
-      params.set('limit','5');
+      params.set('limit',String(LIBRARY_BATCH_LIMIT));
+      params.set('include','full');
       params.set('offset',reset?'0':String(libraryOffset));
       const difficulty=$('difficultyFilter').value,gridType=$('gridTypeFilter').value,gridCount=$('gridCountFilter').value,constraint=$('constraintFilter').value.trim();
       if(difficulty)params.set('difficulty',difficulty);
@@ -323,18 +339,20 @@
       if(gridCount)params.set('gridCount',gridCount);
       if(constraint)params.set('constraint',constraint);
       const data=await apiFetch(`/puzzles?${params.toString()}`);
-      if(reset)libraryItems=[];libraryOffset=Number(data.nextOffset??(Number(data.offset||0)+Number(data.limit||5)));libraryHasMore=Boolean(data.hasMore);
+      if(reset){libraryItems=[];libraryVisibleCount=LIBRARY_PAGE_SIZE}
+      libraryOffset=Number(data.nextOffset??(Number(data.offset||0)+Number(data.limit||LIBRARY_BATCH_LIMIT)));libraryHasMore=Boolean(data.hasMore);
       libraryItems=reset?[...(data.items||[])]:[...libraryItems,...(data.items||[])];
-      if(recentRequest)cacheRecentPuzzles(data.items||[]);
-      preloadPuzzlePayloads(data.items||[]);
+      cacheBatchPuzzlePayloads(data.items||[]);
+      if(recentRequest){cacheRecentPuzzles(data.items||[]);cacheLibrarySnapshot(libraryItems,libraryOffset,libraryHasMore,data.nextOffset)}
       renderLibrary();
-      $('libraryStatus').textContent=libraryItems.length?`${libraryItems.length} puzzle${libraryItems.length===1?'':'s'} loaded.`:'No puzzles match these selections.';
-      $('loadMoreBtn').classList.toggle('hidden',!libraryHasMore);
+      $('libraryStatus').textContent=libraryItems.length?`${Math.min(libraryVisibleCount,libraryItems.length)} of ${libraryItems.length} puzzles loaded.`:'No puzzles match these selections.';
+      updateLoadMoreButton();
     }catch(err){
       const cached=recentRequest?getCachedRecentPuzzles():[];
       if(cached.length){
         libraryItems=cached;
         libraryOffset=cached.length;
+        libraryVisibleCount=LIBRARY_PAGE_SIZE;
         libraryHasMore=false;
         renderLibrary();
         $('libraryStatus').textContent=`Showing ${cached.length} saved recent puzzle${cached.length===1?'':'s'}.`;
@@ -353,7 +371,9 @@
     $('libraryList').innerHTML='';$('libraryEmpty').classList.add('hidden');$('loadMoreBtn').classList.add('hidden');
     try{
       const data=await apiFetch(`/puzzles/${encodeURIComponent(code)}`);
-      libraryItems=[{puzzle_number:data.puzzleNumber,...data.metadata}];
+      const searchRecord={puzzle_number:data.puzzleNumber,...data.metadata,puzzle:data.puzzle};
+      cachePuzzlePayload(data.puzzleNumber||code,data.puzzle,searchRecord);
+      libraryItems=[searchRecord];
       renderLibrary();
       $('libraryStatus').textContent='1 puzzle found.';
       $('libraryEmpty').classList.add('hidden');
@@ -366,8 +386,11 @@
     const record=typeof recordOrCode==='string'?{puzzle_number:recordOrCode}:recordOrCode||{};
     const code=puzzleCodeOf(record);
     if(!code)return;
-    if(record.puzzle){
-      load(record.puzzle,{code,record,progress:getProgress(code)});
+    const cachedPayload=getCachedPuzzlePayload(code);
+    if(record.puzzle||cachedPayload?.puzzle){
+      const puzzle=record.puzzle||cachedPayload.puzzle;
+      const cachedRecord=record.puzzle?record:{...(cachedPayload.record||{}),...record,puzzle_number:code};
+      load(puzzle,{code,record:cachedRecord,progress:getProgress(code)});
       document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
       toast('Playing the saved offline copy.');
       return;
@@ -1216,7 +1239,7 @@
 
     $('searchPuzzleBtn')?.addEventListener('click', searchPuzzle);
     $('applyFiltersBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
-    $('loadMoreBtn')?.addEventListener('click', () => fetchLibrary({ reset: false }));
+    $('loadMoreBtn')?.addEventListener('click', handleLoadMore);
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
@@ -1319,8 +1342,7 @@
     loadFontSettings();
     setupEventListeners();
     window.noticeCarousel?.initialize();
-    renderCachedLibraryImmediately();
-    fetchLibrary({ reset: true });
+    if(!renderCachedLibraryImmediately())fetchLibrary({ reset: true });
   }
 
   if (document.readyState === 'loading') {

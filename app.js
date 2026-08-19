@@ -85,7 +85,8 @@
     puzzleCache: 'lovdoku.puzzle-cache.v1',
     librarySnapshot: 'lovdoku.library-snapshot.v1',
     fontSettings: 'lovdoku.font-settings.v1',
-    solutionWarnings: 'lovdoku.solution-warnings.v1'
+    solutionWarnings: 'lovdoku.solution-warnings.v1',
+    copyProgressNotice: 'lovdoku.copy-progress-notice.v1'
   };
   const RECENT_CACHE_LIMIT = 5;
   const LIBRARY_BATCH_LIMIT = 50;
@@ -189,6 +190,8 @@
   function getSolutionWarningStore(){const value=readStorage(STORAGE_KEYS.solutionWarnings,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function solutionWarningAcknowledged(code){return Boolean(code&&getSolutionWarningStore()[code])}
   function acknowledgeSolutionWarning(code){if(!code)return;const store=getSolutionWarningStore();store[code]=true;writeStorage(STORAGE_KEYS.solutionWarnings,store)}
+  function copyProgressNoticeDismissed(){return Boolean(readStorage(STORAGE_KEYS.copyProgressNotice,{}).dismissed)}
+  function dismissCopyProgressNotice(){writeStorage(STORAGE_KEYS.copyProgressNotice,{dismissed:true})}
   function puzzleCodeOf(record){return normalizeCode(record?.puzzle_number||record?.puzzleNumber||record?.code)}
   function getLikedPuzzleStore(){const value=readStorage(STORAGE_KEYS.likedPuzzles,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getLikedPuzzles(){return Object.values(getLikedPuzzleStore()).filter(record=>puzzleCodeOf(record))}
@@ -222,6 +225,14 @@
     button.textContent=liked?'♥ Liked':'♡ Like';
     button.title=liked?'Remove from liked puzzles':'Add to liked puzzles';
     button.setAttribute('aria-label',button.title);
+  }
+
+  function updateCurrentCopyButton(){
+    const button=$('copyProgressBtn');
+    if(!button)return;
+    const enabled=Boolean(state.puzzle&&state.currentPuzzleCode);
+    button.disabled=!enabled;
+    button.setAttribute('aria-disabled',String(!enabled));
   }
 
   function toggleLike(record){
@@ -294,6 +305,29 @@
   function isRecentRequest(reset){return Boolean(reset&&!$('difficultyFilter').value&&!$('gridTypeFilter').value&&!$('gridCountFilter').value&&!$('constraintFilter').value.trim())}
   function normalizeCode(value){return String(value||'').trim().toUpperCase()}
   function toast(message,duration=1500){const el=$('toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),duration)}
+  let appDialogResolver=null;
+  function resolveAppDialog(confirmed,dontShow=false){
+    const resolver=appDialogResolver;if(!resolver)return;
+    appDialogResolver=null;
+    const modal=$('appDialog');
+    modal?.classList.remove('open');modal?.setAttribute('aria-hidden','true');
+    syncPopupScrollLock();
+    resolver({confirmed,dontShow});
+  }
+  function showAppDialog({kicker='Lovdoku',title='Please confirm',message='',confirmLabel='Continue',cancelLabel='Cancel',showCancel=true,showDontShow=false}={}){
+    const modal=$('appDialog');
+    if(!modal)return Promise.resolve({confirmed:window.confirm(message),dontShow:false});
+    $('appDialogKicker').textContent=kicker;
+    $('appDialogTitle').textContent=title;
+    $('appDialogMessage').textContent=message;
+    $('appDialogConfirm').textContent=confirmLabel;
+    $('appDialogCancel').textContent=cancelLabel;
+    $('appDialogCancel').classList.toggle('hidden',!showCancel);
+    $('appDialogDontShowBtn').classList.toggle('hidden',!showDontShow);
+    modal.classList.add('open');modal.setAttribute('aria-hidden','false');syncPopupScrollLock();
+    setTimeout(()=>$('appDialogConfirm')?.focus(),0);
+    return new Promise(resolve=>{appDialogResolver=resolve});
+  }
   function validCode(code){return /^[A-Z]\d{4}$/.test(code)}
 
   function liveElapsed(){if(!state.startedAt||state.finished)return Math.max(0,state.elapsed);return Math.max(state.elapsed,Math.floor((Date.now()-state.startedAt)/1000));}
@@ -472,13 +506,22 @@
     const siteUrl=`${window.location.origin}/`;
     return `Puzzle Number: ${code}\nLink: ${siteUrl}`;
   }
-
-  async function copyProgressLink(){
-    const text=progressLinkText();
+  async function copyText(text){
     try{
       if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return true}
       const textarea=document.createElement('textarea');textarea.value=text;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const copied=document.execCommand('copy');textarea.remove();return copied;
     }catch(_){return false}
+  }
+  async function copyProgressLink(){return copyText(progressLinkText())}
+  async function copyPuzzleProgress(){
+    if(!state.puzzle||!state.currentPuzzleCode){toast('Choose a puzzle first.');return}
+    const record=currentProgressRecord();
+    const payload={format:'lovdoku-progress',version:1,exportedAt:new Date().toISOString(),progress:{[state.currentPuzzleCode]:record}};
+    const copied=await copyText(JSON.stringify(payload,null,2));
+    if(!copied){toast('Progress could not be copied.');return}
+    if(copyProgressNoticeDismissed()){toast(`Progress for #${state.currentPuzzleCode} copied.`);return}
+    const result=await showAppDialog({kicker:'Progress copied',title:'Share this puzzle progress',message:`Your progress for #${state.currentPuzzleCode} has been copied. Send it to a friend; they can paste it into a .json file and use Import Progress to continue playing this puzzle from where you stopped.`,confirmLabel:'Got it',cancelLabel:'Close',showCancel:false,showDontShow:true});
+    if(result.dontShow)dismissCopyProgressNotice();
   }
 
   const SHARE_IMAGE_WORKER_SOURCE=`self.onmessage=async(event)=>{const {bitmap,type='image/jpeg',quality=.88}=event.data||{};try{if(!bitmap||typeof OffscreenCanvas==='undefined')throw new Error('Worker image processing is unavailable.');const canvas=new OffscreenCanvas(bitmap.width,bitmap.height);const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('Could not create the worker canvas.');context.drawImage(bitmap,0,0);bitmap.close?.();const blob=await canvas.convertToBlob({type,quality});self.postMessage({ok:true,blob})}catch(error){bitmap?.close?.();self.postMessage({ok:false,error:error?.message||'Worker image processing failed.'})}};self.postMessage({ready:true});`;
@@ -728,15 +771,15 @@
   function toggleNotes(){state.notesMode=!state.notesMode;$('notesToggle').classList.toggle('on',state.notesMode);toast(state.notesMode?'Notes mode on':'Notes mode off')}
   function coloredConstraintFor(index){for(const owner of state.puzzle?.owners?.[index]||[]){if(ownerColor(owner,index))return owner.type==='custom_shading'?'Custom shading':prettyConstraint(owner.type)}return ''}
   
-  function toggleSolution(){
+  async function toggleSolution(){
     if(!state.puzzle) return;
     const solveBtn = $('solveBtn');
     const puzzleCode=normalizeCode(state.currentPuzzleCode||state.currentPuzzleRecord?.puzzle_number);
     
     if(!state.solutionShown) {
       if(!solutionWarningAcknowledged(puzzleCode)){
-        const confirmed=window.confirm('Are you sure you want to reveal the complete solution for this puzzle?');
-        if(!confirmed)return;
+        const result=await showAppDialog({kicker:'Solution reveal',title:'Reveal the complete solution?',message:'This will fill the unsolved cells with the answer. You can hide the solution later, but revealing it may spoil the puzzle.',confirmLabel:'Reveal solution',cancelLabel:'Keep solving'});
+        if(!result.confirmed)return;
         acknowledgeSolutionWarning(puzzleCode);
       }
 
@@ -800,7 +843,12 @@
   function isSolved(){return state.values.every((v,i)=>v===state.solution[i]&&v>0)}
   function checkComplete(){if(state.solution.every(Boolean)&&isSolved()){state.finished=true;state.status='Solved';persistProgress();renderLibrary();setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}}
   function hint(){if(!state.puzzle||state.selected<0){toast('Select an empty cell first.');return}let i=state.selected;if(state.givens[i]){const empties=state.values.map((v,k)=>!state.givens[k]&&!v?k:-1).filter(k=>k>=0);i=empties[0]??-1}if(i<0||!state.solution[i]){toast('No hint is available for this puzzle.');return}state.selected=i;state.values[i]=state.solution[i];state.notes[i].clear();autoRemoveNote(state.solution[i],i);state.conflicts.clear();syncStatusAfterChange();render();setStatusFromState();checkComplete()}
-  function reset(){if(!state.puzzle)return;stopTimer();state.values=[...state.givens];state.notes=Array.from({length:state.puzzle.total},()=>new Set());state.selected=-1;state.mistakes=0;state.wrong.clear();state.conflicts.clear();state.finished=false;state.status='Not Started';state.startedAt=null;state.elapsed=0;resetSolutionButtonState();persistProgress();renderLibrary();setStatusFromState();render();toast('Puzzle reset.')}
+  async function reset(){
+    if(!state.puzzle)return;
+    const result=await showAppDialog({kicker:'Reset puzzle',title:'Reset this puzzle?',message:'This will clear your entries, notes, timer, and mistakes for this puzzle. This action cannot be undone.',confirmLabel:'Reset puzzle',cancelLabel:'Keep playing'});
+    if(!result.confirmed)return;
+    stopTimer();state.values=[...state.givens];state.notes=Array.from({length:state.puzzle.total},()=>new Set());state.selected=-1;state.mistakes=0;state.wrong.clear();state.conflicts.clear();state.finished=false;state.status='Not Started';state.startedAt=null;state.elapsed=0;resetSolutionButtonState();persistProgress();renderLibrary();setStatusFromState();render();toast('Puzzle reset.')
+  }
   function updateStats(){const filled=state.values.filter(Boolean).length,total=state.puzzle?.total||81;$('filledStat').textContent=`${filled}/${total}`;$('mistakeStat').textContent=state.mistakes;$('timerStat').textContent=formatTime(state.elapsed)}
 
   function formatTime(s){
@@ -833,7 +881,7 @@
   }
 
   function syncPopupScrollLock(){
-    const isPopupOpen=Boolean($('drawerPanel')?.classList.contains('open')||$('settingsModal')?.classList.contains('open')||$('fullscreenOverlay')?.classList.contains('active'));
+    const isPopupOpen=Boolean($('drawerPanel')?.classList.contains('open')||$('settingsModal')?.classList.contains('open')||$('fullscreenOverlay')?.classList.contains('active')||$('appDialog')?.classList.contains('open'));
     document.body.classList.toggle('popup-open',isPopupOpen);
   }
 
@@ -1123,6 +1171,7 @@
     $('boardPuzzleNumber').textContent = `#${state.currentPuzzleCode}`;
 
     updateCurrentLikeButton();
+    updateCurrentCopyButton();
     renderMetadata();
     render();
     setStatusFromState();
@@ -1283,7 +1332,14 @@
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
+    $('copyProgressBtn')?.addEventListener('click', copyPuzzleProgress);
     $('shareBtn')?.addEventListener('click', downloadShareImage);
+    $('appDialogConfirm')?.addEventListener('click', () => resolveAppDialog(true));
+    $('appDialogCancel')?.addEventListener('click', () => resolveAppDialog(false));
+    $('appDialogDismiss')?.addEventListener('click', () => resolveAppDialog(false));
+    $('appDialogDontShowBtn')?.addEventListener('click', () => resolveAppDialog(true,true));
+    $('appDialog')?.addEventListener('click', event => { if(event.target.id==='appDialog') resolveAppDialog(false); });
+    document.addEventListener('keydown', event => { if(event.key==='Escape'&&$('appDialog')?.classList.contains('open')) resolveAppDialog(false); });
 
     $('gridTypeFilter')?.addEventListener('change', updateGridCountOptions);
 

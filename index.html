@@ -116,6 +116,7 @@
             <div class="play-actions-row">
               <span class="puzzle-code-badge" id="boardPuzzleNumber">#—</span>
               <button class="btn ghost current-like-btn" id="currentLikeBtn" type="button" aria-label="Like this puzzle">♡ Like</button>
+              <button class="btn ghost current-copy-btn" id="copyProgressBtn" type="button" aria-label="Copy progress for this puzzle">↗ Copy Progress</button>
               <button class="btn ghost current-share-btn" id="shareBtn" type="button" aria-label="Download a share image">⇩ Share</button>
               <button class="btn ghost" id="fullscreenBtn" type="button" aria-label="Enter Fullscreen Mode">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -353,6 +354,20 @@
     <div class="modal-footer">
       <button class="btn ghost" id="resetFontSettingsBtn" type="button">Reset Defaults</button>
       <button class="btn primary" id="saveFontSettingsBtn" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="app-dialog" id="appDialog" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="app-dialog-card" role="document">
+    <div class="app-dialog-icon" aria-hidden="true">?</div>
+    <p class="app-dialog-kicker" id="appDialogKicker">Lovdoku</p>
+    <h2 id="appDialogTitle">Please confirm</h2>
+    <p class="app-dialog-message" id="appDialogMessage"></p>
+    <div class="app-dialog-actions">
+      <button class="btn ghost hidden" id="appDialogCancel" type="button">Cancel</button>
+      <button class="btn ghost hidden" id="appDialogDontShowBtn" type="button">Do not show me again</button>
+      <button class="btn primary" id="appDialogConfirm" type="button">Continue</button>
     </div>
   </div>
 </div>

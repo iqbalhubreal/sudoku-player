@@ -651,7 +651,7 @@ button { border: 0; cursor: pointer; }
   75% { transform: translateX(3px); }
 }
 
-.cell.complete { background: #d1fae5 !important; }
+.cell.complete { background: #dbeafe !important; }
 
 /* Constraint Color Variants */
 .cell.constraint-windoku { background: #e0e7ff; }
@@ -1302,22 +1302,6 @@ button { border: 0; cursor: pointer; }
 }
 
 
-.current-copy-btn {
-  padding: 6px 12px;
-  font-size: 12px;
-  border-radius: 8px;
-}
-
-.current-copy-btn:not(:disabled) {
-  color: #4338ca;
-  background: #eef2ff;
-  border: 1px solid rgba(79, 70, 229, 0.18);
-}
-
-.current-copy-btn:not(:disabled):hover {
-  background: #e0e7ff;
-  color: #3730a3;
-}
 
 .app-dialog {
   position: fixed;

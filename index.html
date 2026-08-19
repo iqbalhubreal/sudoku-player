@@ -116,7 +116,6 @@
             <div class="play-actions-row">
               <span class="puzzle-code-badge" id="boardPuzzleNumber">#—</span>
               <button class="btn ghost current-like-btn" id="currentLikeBtn" type="button" aria-label="Like this puzzle">♡ Like</button>
-              <button class="btn ghost current-copy-btn" id="copyProgressBtn" type="button" aria-label="Copy progress for this puzzle">↗ Copy Progress</button>
               <button class="btn ghost current-share-btn" id="shareBtn" type="button" aria-label="Download a share image">⇩ Share</button>
               <button class="btn ghost" id="fullscreenBtn" type="button" aria-label="Enter Fullscreen Mode">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -344,6 +343,20 @@
       </select>
     </div>
 
+    <div class="settings-group">
+      <div class="settings-label">
+        <span>User Entry Color</span>
+      </div>
+      <select id="entryColorSelect" class="settings-select">
+        <option value="#1d4ed8">Deep Blue (Default)</option>
+        <option value="#1e3a8a">Midnight Navy</option>
+        <option value="#3730a3">Deep Indigo</option>
+        <option value="#6d28d9">Deep Violet</option>
+        <option value="#0f766e">Deep Teal</option>
+        <option value="#be123c">Deep Rose</option>
+      </select>
+    </div>
+
     <div class="font-preview-box">
       <div class="settings-label" style="justify-content:center; margin-bottom:10px;">Preview Cell</div>
       <div class="font-preview-cell" id="fontPreviewCell">7</div>
@@ -366,7 +379,6 @@
     <p class="app-dialog-message" id="appDialogMessage"></p>
     <div class="app-dialog-actions">
       <button class="btn ghost hidden" id="appDialogCancel" type="button">Cancel</button>
-      <button class="btn ghost hidden" id="appDialogDontShowBtn" type="button">Do not show me again</button>
       <button class="btn primary" id="appDialogConfirm" type="button">Continue</button>
     </div>
   </div>

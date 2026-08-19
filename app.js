@@ -84,7 +84,8 @@
     likedPuzzles: 'lovdoku.liked-puzzles.v1',
     puzzleCache: 'lovdoku.puzzle-cache.v1',
     librarySnapshot: 'lovdoku.library-snapshot.v1',
-    fontSettings: 'lovdoku.font-settings.v1'
+    fontSettings: 'lovdoku.font-settings.v1',
+    solutionWarnings: 'lovdoku.solution-warnings.v1'
   };
   const RECENT_CACHE_LIMIT = 5;
   const LIBRARY_BATCH_LIMIT = 50;
@@ -185,6 +186,9 @@
   function writeStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(_){return false}}
   function getProgressStore(){const value=readStorage(STORAGE_KEYS.progress,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getProgress(code){return getProgressStore()[code]||null}
+  function getSolutionWarningStore(){const value=readStorage(STORAGE_KEYS.solutionWarnings,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
+  function solutionWarningAcknowledged(code){return Boolean(code&&getSolutionWarningStore()[code])}
+  function acknowledgeSolutionWarning(code){if(!code)return;const store=getSolutionWarningStore();store[code]=true;writeStorage(STORAGE_KEYS.solutionWarnings,store)}
   function puzzleCodeOf(record){return normalizeCode(record?.puzzle_number||record?.puzzleNumber||record?.code)}
   function getLikedPuzzleStore(){const value=readStorage(STORAGE_KEYS.likedPuzzles,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getLikedPuzzles(){return Object.values(getLikedPuzzleStore()).filter(record=>puzzleCodeOf(record))}
@@ -727,8 +731,15 @@
   function toggleSolution(){
     if(!state.puzzle) return;
     const solveBtn = $('solveBtn');
+    const puzzleCode=normalizeCode(state.currentPuzzleCode||state.currentPuzzleRecord?.puzzle_number);
     
     if(!state.solutionShown) {
+      if(!solutionWarningAcknowledged(puzzleCode)){
+        const confirmed=window.confirm('Are you sure you want to reveal the complete solution for this puzzle?');
+        if(!confirmed)return;
+        acknowledgeSolutionWarning(puzzleCode);
+      }
+
       state.preSolutionValues = [...state.values];
       state.preSolutionNotes = state.notes.map(set => new Set(set));
       

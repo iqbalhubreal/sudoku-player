@@ -1003,10 +1003,9 @@ button { border: 0; cursor: pointer; }
   z-index: 10;
 }
 
-/* Keep the full-screen viewport dark while making the puzzle surface opaque and readable. */
-.fullscreen-overlay .board,
+/* Keep multi-grid gaps transparent so white appears only inside each actual grid. */
 .fullscreen-overlay .board.multi {
-  background: #ffffff;
+  background: transparent;
 }
 
 .fullscreen-overlay .keypad { margin: 0; max-width: 500px; width: 100%; }

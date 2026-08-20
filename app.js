@@ -151,7 +151,9 @@
     }
     
     if (cellHeight > 0) {
-      const computedPx = cellHeight * (fontSettings.sizePct / 100);
+      const cellWidth = firstCell?.getBoundingClientRect().width || cellHeight;
+      const requestedPx = cellHeight * (fontSettings.sizePct / 100);
+      const computedPx = Math.max(8, Math.min(requestedPx, cellHeight * 0.8, cellWidth * 0.82));
       document.documentElement.style.setProperty('--cell-font-size-px', `${computedPx}px`);
     }
   }
@@ -1151,6 +1153,7 @@
     state.notes = Array.from({length: parsed.total}, () => new Set());
     state.selected = -1;
     state.notesMode = false;
+    $('notesToggle')?.classList.remove('on');
     state.mistakes = 0;
     state.wrong.clear();
     state.conflicts.clear();

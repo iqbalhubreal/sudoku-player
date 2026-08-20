@@ -944,7 +944,7 @@ button { border: 0; cursor: pointer; }
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 20% 15%, rgba(129,140,248,.18), transparent 28%), radial-gradient(circle at 80% 80%, rgba(45,212,191,.12), transparent 32%), #111827;
+  background: #111827;
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -964,6 +964,22 @@ button { border: 0; cursor: pointer; }
 }
 
 .fs-transform-layer.dragging { transition: none !important; }
+
+.fullscreen-overlay .board {
+  background: transparent;
+}
+
+.fullscreen-overlay .board:not(.multi) {
+  background: #ffffff;
+}
+
+.fullscreen-overlay .board.multi .cell:not(.blank) {
+  background: #ffffff;
+}
+
+.fullscreen-overlay .board.multi .cell.blank {
+  background: transparent !important;
+}
 
 .fs-footer {
   background: #1e293b;

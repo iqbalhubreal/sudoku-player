@@ -185,8 +185,71 @@
     if (settings.thickLineColor) document.documentElement.style.setProperty('--thick-line-color', settings.thickLineColor);
   }
 
-  function readStorage(key,fallback){try{const value=JSON.parse(localStorage.getItem(key)||'null');return value??fallback}catch(_){return fallback}}
-  function writeStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(_){return false}}
+  const IDB_NAME='lovdoku';
+  const IDB_VERSION=1;
+  const IDB_STORE='kv';
+  let idbDatabase=null;
+  let storageBackend='localStorage';
+  const storageMemory=Object.create(null);
+
+  function localStorageRead(key){try{const raw=localStorage.getItem(key);return raw===null?undefined:JSON.parse(raw)}catch(_){return undefined}}
+  function localStorageWrite(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(_){return false}}
+  function openStorageDatabase(){
+    return new Promise((resolve,reject)=>{
+      if(typeof indexedDB==='undefined'){reject(new Error('IndexedDB is unavailable.'));return}
+      const request=indexedDB.open(IDB_NAME,IDB_VERSION);
+      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'key'})};
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error||new Error('IndexedDB could not be opened.'));
+      request.onblocked=()=>reject(new Error('IndexedDB is blocked.'));
+    });
+  }
+  function idbReadAll(db){
+    return new Promise((resolve,reject)=>{
+      const request=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).getAll();
+      request.onsuccess=()=>resolve(request.result||[]);
+      request.onerror=()=>reject(request.error||new Error('IndexedDB read failed.'));
+    });
+  }
+  function idbWrite(key,value){
+    if(!idbDatabase)return Promise.reject(new Error('IndexedDB is unavailable.'));
+    return new Promise((resolve,reject)=>{
+      const transaction=idbDatabase.transaction(IDB_STORE,'readwrite');
+      transaction.objectStore(IDB_STORE).put({key,value});
+      transaction.oncomplete=()=>resolve(true);
+      transaction.onerror=()=>reject(transaction.error||new Error('IndexedDB write failed.'));
+      transaction.onabort=()=>reject(transaction.error||new Error('IndexedDB write aborted.'));
+    });
+  }
+  async function initStorage(){
+    const keys=Object.values(STORAGE_KEYS);
+    try{
+      const db=await openStorageDatabase();
+      const rows=await idbReadAll(db);
+      idbDatabase=db;
+      storageBackend='indexedDB';
+      rows.forEach(row=>{if(row&&typeof row.key==='string')storageMemory[row.key]=row.value});
+      for(const key of keys){
+        if(Object.prototype.hasOwnProperty.call(storageMemory,key))continue;
+        const legacy=localStorageRead(key);
+        if(legacy===undefined)continue;
+        storageMemory[key]=legacy;
+        try{await idbWrite(key,legacy)}catch(_){storageBackend='localStorage';break}
+      }
+    }catch(_){
+      storageBackend='localStorage';
+      keys.forEach(key=>{const legacy=localStorageRead(key);if(legacy!==undefined)storageMemory[key]=legacy});
+    }
+  }
+  function readStorage(key,fallback){return Object.prototype.hasOwnProperty.call(storageMemory,key)?storageMemory[key]:fallback}
+  function writeStorage(key,value){
+    storageMemory[key]=value;
+    if(storageBackend==='indexedDB'){
+      idbWrite(key,value).catch(()=>{storageBackend='localStorage';localStorageWrite(key,value)});
+      return true;
+    }
+    return localStorageWrite(key,value);
+  }
   function getProgressStore(){const value=readStorage(STORAGE_KEYS.progress,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getProgress(code){return getProgressStore()[code]||null}
   function getSolutionWarningStore(){const value=readStorage(STORAGE_KEYS.solutionWarnings,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
@@ -1356,7 +1419,8 @@
     });
   }
 
-  function init() {
+  async function init() {
+    await initStorage();
     setupPwa();
     loadFontSettings();
     setupEventListeners();

@@ -504,21 +504,42 @@
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lovdoku-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
   }
 
-  function progressLinkText(){
-    const code=state.currentPuzzleCode||'puzzle';
+  function puzzleShareUrl(){
     const url=new URL(window.location.href);
     url.search='';
     url.hash='';
-    url.searchParams.set('puzzle',code);
-    return `Puzzle Number: ${code}\nLink: ${url.toString()}`;
+    url.searchParams.set('puzzle',state.currentPuzzleCode||'puzzle');
+    return url;
+  }
+
+  function progressLinkText(){
+    const code=state.currentPuzzleCode||'puzzle';
+    return `Puzzle Number: ${code}\nLink: ${puzzleShareUrl().toString()}`;
   }
 
   async function copyProgressLink(){
-    const text=progressLinkText();
+    const text=puzzleShareUrl().toString();
     try{
-      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return true}
-      const textarea=document.createElement('textarea');textarea.value=text;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const copied=document.execCommand('copy');textarea.remove();return copied;
-    }catch(_){return false}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);toast('Puzzle link copied.');return true}
+      const textarea=document.createElement('textarea');textarea.value=text;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const copied=document.execCommand('copy');textarea.remove();if(copied)toast('Puzzle link copied.');return copied;
+    }catch(_){toast('Could not copy the puzzle link.');return false}
+  }
+
+  function setShareMenuOpen(open){
+    const menu=$('shareMenu');
+    const button=$('shareBtn');
+    if(!menu||!button)return;
+    menu.classList.toggle('open',open);
+    button.setAttribute('aria-expanded',String(open));
+  }
+
+  function setShareBusy(busy){
+    const button=$('shareBtn');
+    if(button){button.disabled=busy;button.textContent=busy?'Preparing…':'⇧ Share'}
+    ['downloadShareBtn','copyLinkBtn','nativeShareBtn'].forEach(id=>{
+      const option=$(id);
+      if(option)option.disabled=busy;
+    });
   }
 
   const SHARE_IMAGE_WORKER_SOURCE=`self.onmessage=async(event)=>{const {bitmap,type='image/jpeg',quality=.88}=event.data||{};try{if(!bitmap||typeof OffscreenCanvas==='undefined')throw new Error('Worker image processing is unavailable.');const canvas=new OffscreenCanvas(bitmap.width,bitmap.height);const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('Could not create the worker canvas.');context.drawImage(bitmap,0,0);bitmap.close?.();const blob=await canvas.convertToBlob({type,quality});self.postMessage({ok:true,blob})}catch(error){bitmap?.close?.();self.postMessage({ok:false,error:error?.message||'Worker image processing failed.'})}};self.postMessage({ready:true});`;
@@ -551,39 +572,79 @@
     });
   }
 
-  async function downloadShareImage(){
-    if(!state.puzzle){toast('Choose a puzzle first.');return}
-    if(!window.html2canvas){toast('The share image tool is still loading.');return}
+  async function createShareImage(){
+    if(!state.puzzle){toast('Choose a puzzle first.');return null}
+    if(!window.html2canvas){toast('The share image tool is still loading.');return null}
     const layout=document.querySelector('main.layout');
     const footer=document.querySelector('.footer');
-    const button=$('shareBtn');
-    if(!layout||!footer)return;
-    if(state.fsActive){toast('Exit fullscreen before downloading the share image.');return}
-    if(button){button.disabled=true;button.textContent='Preparing…'}
-    const copyPromise=copyProgressLink();
+    if(!layout||!footer)return null;
+    if(state.fsActive){toast('Exit fullscreen before sharing the image.');return null}
     const stage=document.createElement('div');
     const captureWidth=Math.max(900,Math.min(1200,document.documentElement.clientWidth||1200));
     stage.className='share-capture-stage';
     stage.style.width=`${captureWidth}px`;
     stage.append(layout.cloneNode(true),footer.cloneNode(true));
-    stage.querySelector('#shareBtn')?.remove();
+    stage.querySelector('#shareMenu')?.remove();
     document.body.appendChild(stage);
     try{
       await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
       const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1.35,useCORS:true,allowTaint:false,logging:false,imageTimeout:0});
       const blob=await encodeShareImage(canvas);
       if(!blob)throw new Error('Image creation failed.');
+      return blob;
+    }catch(err){
+      console.error('Share image creation failed',err);
+      toast('Could not create the share image.');
+      return null;
+    }finally{
+      stage.remove();
+    }
+  }
+
+  async function downloadShareImage(){
+    setShareBusy(true);
+    try{
+      const blob=await createShareImage();
+      if(!blob)return false;
       const url=URL.createObjectURL(blob),a=document.createElement('a');
       a.href=url;a.download=`${state.currentPuzzleCode||'puzzle'}.jpg`;a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
-      const copied=await copyPromise;
-      toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.',5000);
-    }catch(err){
-      console.error('Share image download failed',err);
-      toast('Could not create the share image.');
+      toast('Share image downloaded.');
+      return true;
     }finally{
-      stage.remove();
-      if(button){button.disabled=false;button.textContent='⇩ Share'}
+      setShareBusy(false);
+    }
+  }
+
+  async function sharePuzzle(){
+    if(!state.puzzle){toast('Choose a puzzle first.');return false}
+    if(typeof navigator.share!=='function'){
+      toast('Native sharing is not supported; copying the link instead.');
+      return copyProgressLink();
+    }
+    setShareBusy(true);
+    try{
+      const blob=await createShareImage();
+      if(!blob)return false;
+      const code=state.currentPuzzleCode||'puzzle';
+      const file=new File([blob],`${code}.jpg`,{type:'image/jpeg'});
+      const shareData={
+        title:`Sudoku Puzzle ${code}`,
+        text:`Try Sudoku Puzzle ${code}`,
+        url:puzzleShareUrl().toString()
+      };
+      if(typeof navigator.canShare==='function'&&navigator.canShare({files:[file]}))shareData.files=[file];
+      await navigator.share(shareData);
+      toast('Sharing options opened.');
+      return true;
+    }catch(err){
+      if(err?.name!=='AbortError'){
+        console.error('Native share failed',err);
+        toast('Could not open the sharing options.');
+      }
+      return false;
+    }finally{
+      setShareBusy(false);
     }
   }
 
@@ -1316,7 +1377,36 @@
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
-    $('shareBtn')?.addEventListener('click', downloadShareImage);
+
+    const shareMenu=$('shareMenu');
+    const shareButton=$('shareBtn');
+    shareButton?.addEventListener('click', event=>{
+      event.stopPropagation();
+      const isOpen=shareMenu?.classList.contains('open');
+      setShareMenuOpen(!isOpen);
+      if(!isOpen)$('downloadShareBtn')?.focus();
+    });
+    $('downloadShareBtn')?.addEventListener('click', async()=>{
+      setShareMenuOpen(false);
+      await downloadShareImage();
+    });
+    $('copyLinkBtn')?.addEventListener('click', async()=>{
+      setShareMenuOpen(false);
+      await copyProgressLink();
+    });
+    $('nativeShareBtn')?.addEventListener('click', async()=>{
+      setShareMenuOpen(false);
+      await sharePuzzle();
+    });
+    document.addEventListener('click', event=>{
+      if(!shareMenu?.contains(event.target))setShareMenuOpen(false);
+    });
+    document.addEventListener('keydown', event=>{
+      if(event.key==='Escape'&&shareMenu?.classList.contains('open')){
+        setShareMenuOpen(false);
+        shareButton?.focus();
+      }
+    });
 
     $('gridTypeFilter')?.addEventListener('change', updateGridCountOptions);
 

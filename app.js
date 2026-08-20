@@ -103,7 +103,8 @@
     family: "'Plus Jakarta Sans', sans-serif",
     sizePct: 65,
     weight: '700',
-    entryColor: '#1d4ed8'
+    entryColor: '#1d4ed8',
+    notesPct: 20
   };
   let fontSettings = {...defaultFontSettings};
 
@@ -114,6 +115,8 @@
       fontSettings.sizePct = Math.min(90, Math.max(40, Number(saved.sizePct) || 65));
       fontSettings.weight = String(saved.weight || '700');
       fontSettings.entryColor = /^#[0-9a-f]{6}$/i.test(saved.entryColor || '') ? saved.entryColor : defaultFontSettings.entryColor;
+      const savedNotesPct = Number(saved.notesPct);
+      fontSettings.notesPct = Number.isFinite(savedNotesPct) ? Math.min(35, Math.max(10, Math.round(savedNotesPct))) : defaultFontSettings.notesPct;
     }
     applyFontSettings();
   }
@@ -128,12 +131,15 @@
     document.documentElement.style.setProperty('--board-font-weight', fontSettings.weight);
     document.documentElement.style.setProperty('--cell-font-pct', fontSettings.sizePct);
     document.documentElement.style.setProperty('--entry', fontSettings.entryColor);
+    document.documentElement.style.setProperty('--notes-font-scale', String(fontSettings.notesPct / 100));
     
     if ($('fontFamilySelect')) $('fontFamilySelect').value = fontSettings.family;
     if ($('fontSizeRange')) $('fontSizeRange').value = fontSettings.sizePct;
     if ($('fontSizeValDisplay')) $('fontSizeValDisplay').textContent = `${fontSettings.sizePct}%`;
     if ($('fontWeightSelect')) $('fontWeightSelect').value = fontSettings.weight;
     if ($('entryColorSelect')) $('entryColorSelect').value = fontSettings.entryColor;
+    if ($('notesSizeRange')) $('notesSizeRange').value = fontSettings.notesPct;
+    if ($('notesSizeValDisplay')) $('notesSizeValDisplay').textContent = `${fontSettings.notesPct}%`;
 
     updateCellFontSizePx();
     updateFontPreviewCell();
@@ -848,7 +854,8 @@
     }
   }
 
-  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n))state.notes[i].delete(n);else state.notes[i].add(n);state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
+  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n)){state.notes[i].delete(n)}else{const blocker=noteConflictPeer(i,n);if(blocker!==undefined){toast(`Note ${n} rejected: that number is already nearby.`);return}state.notes[i].add(n)}state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
+  function noteConflictPeer(index,n){return [...peersOf(index)].find(p=>(state.values[p]||state.givens[p])===n)}
   function autoRemoveNote(n,index){if(!n)return;peersOf(index).forEach(p=>state.notes[p].delete(n))}
   function conflicts(){const bad=new Set();groupSets().forEach(g=>{const seen=new Map();g.forEach(i=>{const v=state.values[i]||state.givens[i];if(v){if(!seen.has(v))seen.set(v,[]);seen.get(v).push(i)}});seen.forEach(arr=>{if(arr.length>1)arr.forEach(i=>bad.add(i))})});return bad}
   function check(){const bad=conflicts();state.conflicts=bad;let wrong=0;state.values.forEach((v,i)=>{if(v&&state.solution[i]&&v!==state.solution[i]&&!state.givens[i]){state.wrong.add(i);wrong++}});state.mistakes+=wrong;if(state.values.some((v,i)=>!state.givens[i]&&v))state.status=isSolved()?'Solved':'In Progress';state.finished=state.status==='Solved';persistProgress();renderLibrary();render();if(bad.size||wrong){setStatus('Keep going','Some entries need attention. Red cells are conflicts or incorrect answers.','bad');toast(`${bad.size+wrong} answer${bad.size+wrong===1?'':'s'} need attention.`)}else if(isSolved()){setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}else{setStatus('In Progress','Your progress is being saved automatically.','');toast('No mistakes so far.')}}
@@ -1395,6 +1402,11 @@
     $('entryColorSelect')?.addEventListener('change', (e) => {
       fontSettings.entryColor = e.target.value;
       updateFontPreviewCell();
+    });
+
+    $('notesSizeRange')?.addEventListener('input', (e) => {
+      fontSettings.notesPct = Math.min(35, Math.max(10, Number(e.target.value) || defaultFontSettings.notesPct));
+      applyFontSettings();
     });
 
     $('saveFontSettingsBtn')?.addEventListener('click', () => {

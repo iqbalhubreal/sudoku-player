@@ -172,12 +172,20 @@
 
   function updateFontPreviewCell() {
     const cell = $('fontPreviewCell');
-    if (!cell) return;
-    cell.style.fontFamily = fontSettings.family;
-    cell.style.fontWeight = fontSettings.weight;
-    cell.style.color = fontSettings.entryColor;
-    const px = 64 * (fontSettings.sizePct / 100);
-    cell.style.fontSize = `${px}px`;
+    const notes = $('fontPreviewNotes');
+    if (cell) {
+      cell.style.fontFamily = fontSettings.family;
+      cell.style.fontWeight = fontSettings.weight;
+      cell.style.color = fontSettings.entryColor;
+      const px = 64 * (fontSettings.sizePct / 100);
+      cell.style.fontSize = `${px}px`;
+    }
+    if (notes) {
+      notes.style.fontFamily = fontSettings.family;
+      notes.style.fontWeight = fontSettings.weight;
+      notes.style.color = fontSettings.entryColor;
+      notes.style.setProperty('--preview-notes-size', `${64 * (fontSettings.notesPct / 100)}px`);
+    }
   }
 
   function resetBoardAppearance() {

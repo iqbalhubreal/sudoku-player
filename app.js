@@ -85,12 +85,15 @@
     puzzleCache: 'lovdoku.puzzle-cache.v1',
     librarySnapshot: 'lovdoku.library-snapshot.v1',
     fontSettings: 'lovdoku.font-settings.v1',
-    solutionWarnings: 'lovdoku.solution-warnings.v1'
+    solutionWarnings: 'lovdoku.solution-warnings.v1',
+    storageMaintenance: 'lovdoku.storage-maintenance.v1'
   };
   const RECENT_CACHE_LIMIT = 5;
   const LIBRARY_BATCH_LIMIT = 50;
   const LIBRARY_PAGE_SIZE = 5;
   const LIBRARY_CACHE_TTL_MS = 15 * 60 * 1000;
+  const PUZZLE_CACHE_LIMIT = 50;
+  const PROGRESS_WRITE_INTERVAL_MS = 15 * 1000;
   let libraryItems = [];
   let libraryOffset = 0;
   let libraryVisibleCount = LIBRARY_PAGE_SIZE;
@@ -197,11 +200,13 @@
   }
 
   const IDB_NAME='lovdoku';
-  const IDB_VERSION=1;
+  const IDB_VERSION=3;
   const IDB_STORE='kv';
+  const IDB_PUZZLE_STORE='puzzles';
   let idbDatabase=null;
   let storageBackend='localStorage';
   const storageMemory=Object.create(null);
+  const storageSerialized=Object.create(null);
 
   function localStorageRead(key){try{const raw=localStorage.getItem(key);return raw===null?undefined:JSON.parse(raw)}catch(_){return undefined}}
   function localStorageWrite(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(_){return false}}
@@ -209,17 +214,61 @@
     return new Promise((resolve,reject)=>{
       if(typeof indexedDB==='undefined'){reject(new Error('IndexedDB is unavailable.'));return}
       const request=indexedDB.open(IDB_NAME,IDB_VERSION);
-      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'key'})};
+      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'key'});if(!db.objectStoreNames.contains(IDB_PUZZLE_STORE))db.createObjectStore(IDB_PUZZLE_STORE,{keyPath:'code'})};
       request.onsuccess=()=>resolve(request.result);
       request.onerror=()=>reject(request.error||new Error('IndexedDB could not be opened.'));
       request.onblocked=()=>reject(new Error('IndexedDB is blocked.'));
     });
   }
-  function idbReadAll(db){
+  function idbReadAll(db,storeName=IDB_STORE){
     return new Promise((resolve,reject)=>{
-      const request=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).getAll();
+      const request=db.transaction(storeName,'readonly').objectStore(storeName).getAll();
       request.onsuccess=()=>resolve(request.result||[]);
       request.onerror=()=>reject(request.error||new Error('IndexedDB read failed.'));
+    });
+  }
+  function idbUpdatePuzzleRows(entries=[],deletedCodes=[]){
+    if(!idbDatabase)return Promise.reject(new Error('IndexedDB is unavailable.'));
+    return new Promise((resolve,reject)=>{
+      const transaction=idbDatabase.transaction(IDB_PUZZLE_STORE,'readwrite');
+      const store=transaction.objectStore(IDB_PUZZLE_STORE);
+      deletedCodes.forEach(code=>store.delete(code));
+      entries.forEach(entry=>store.put({code:entry.code,value:entry.value}));
+      transaction.oncomplete=()=>resolve(true);
+      transaction.onerror=()=>reject(transaction.error||new Error('Puzzle cache update failed.'));
+      transaction.onabort=()=>reject(transaction.error||new Error('Puzzle cache update aborted.'));
+    });
+  }
+  function idbDeleteKey(key){
+    if(!idbDatabase)return Promise.reject(new Error('IndexedDB is unavailable.'));
+    return new Promise((resolve,reject)=>{
+      const transaction=idbDatabase.transaction(IDB_STORE,'readwrite');
+      transaction.objectStore(IDB_STORE).delete(key);
+      transaction.oncomplete=()=>resolve(true);
+      transaction.onerror=()=>reject(transaction.error||new Error('IndexedDB key deletion failed.'));
+      transaction.onabort=()=>reject(transaction.error||new Error('IndexedDB key deletion aborted.'));
+    });
+  }
+  function idbReplaceAll(kvRows=[],puzzleRows=[]){
+    return new Promise((resolve,reject)=>{
+      const request=indexedDB.deleteDatabase(IDB_NAME);
+      request.onerror=()=>reject(request.error||new Error('IndexedDB compaction failed.'));
+      request.onblocked=()=>reject(new Error('IndexedDB compaction was blocked.'));
+      request.onsuccess=()=>{
+        const openRequest=indexedDB.open(IDB_NAME,IDB_VERSION);
+        openRequest.onupgradeneeded=()=>{const db=openRequest.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'key'});if(!db.objectStoreNames.contains(IDB_PUZZLE_STORE))db.createObjectStore(IDB_PUZZLE_STORE,{keyPath:'code'})};
+        openRequest.onerror=()=>reject(openRequest.error||new Error('IndexedDB recreation failed.'));
+        openRequest.onsuccess=()=>{
+          const db=openRequest.result;
+          const transaction=db.transaction([IDB_STORE,IDB_PUZZLE_STORE],'readwrite');
+          const kvStore=transaction.objectStore(IDB_STORE),puzzleStore=transaction.objectStore(IDB_PUZZLE_STORE);
+          kvRows.forEach(row=>kvStore.put(row));
+          puzzleRows.forEach(row=>puzzleStore.put(row));
+          transaction.oncomplete=()=>{idbDatabase=db;resolve(true)};
+          transaction.onerror=()=>{try{db.close()}catch(_){};reject(transaction.error||new Error('IndexedDB compaction write failed.'))};
+          transaction.onabort=()=>{try{db.close()}catch(_){};reject(transaction.error||new Error('IndexedDB compaction write aborted.'))};
+        };
+      };
     });
   }
   function idbWrite(key,value){
@@ -236,17 +285,49 @@
     const keys=Object.values(STORAGE_KEYS);
     try{
       const db=await openStorageDatabase();
-      const rows=await idbReadAll(db);
+      const rows=await idbReadAll(db,IDB_STORE);
+      const puzzleRows=await idbReadAll(db,IDB_PUZZLE_STORE);
       idbDatabase=db;
       storageBackend='indexedDB';
-      rows.forEach(row=>{if(row&&typeof row.key==='string')storageMemory[row.key]=row.value});
+      rows.forEach(row=>{if(row&&typeof row.key==='string'){storageMemory[row.key]=row.value;storageSerialized[row.key]=JSON.stringify(row.value)}});
       for(const key of keys){
-        if(Object.prototype.hasOwnProperty.call(storageMemory,key))continue;
+        if(Object.prototype.hasOwnProperty.call(storageMemory,key)){try{localStorage.removeItem(key)}catch(_){};continue}
         const legacy=localStorageRead(key);
         if(legacy===undefined)continue;
         storageMemory[key]=legacy;
-        try{await idbWrite(key,legacy)}catch(_){storageBackend='localStorage';break}
+        storageSerialized[key]=JSON.stringify(legacy);
+        try{await idbWrite(key,legacy);try{localStorage.removeItem(key)}catch(_){}}catch(_){storageBackend='localStorage';break}
       }
+      const existingCache=readStorage(STORAGE_KEYS.puzzleCache,{})||{};
+      puzzleRows.forEach(row=>{if(row&&typeof row.code==='string'&&row.value)existingCache[row.code]=row.value});
+      const prunedCache=prunePuzzleCache(existingCache);
+      storageMemory[STORAGE_KEYS.puzzleCache]=prunedCache;
+      storageSerialized[STORAGE_KEYS.puzzleCache]=JSON.stringify(prunedCache);
+      try{
+        const entries=Object.entries(prunedCache).map(([code,value])=>({code,value}));
+        const removedCodes=Object.keys(existingCache).filter(code=>!prunedCache[code]);
+        await idbUpdatePuzzleRows(entries,removedCodes);
+        await idbDeleteKey(STORAGE_KEYS.puzzleCache);
+      }catch(_){}
+      try{localStorage.removeItem(STORAGE_KEYS.puzzleCache)}catch(_){}
+      if(storageMemory[STORAGE_KEYS.storageMaintenance]!=='idb-v3-compacted'&&idbDatabase){
+        const kvRows=Object.entries(storageMemory).filter(([key,value])=>key!==STORAGE_KEYS.puzzleCache&&key!==STORAGE_KEYS.storageMaintenance&&value!==undefined).map(([key,value])=>({key,value}));
+        kvRows.push({key:STORAGE_KEYS.storageMaintenance,value:'idb-v3-compacted'});
+        const puzzleRows=Object.entries(prunedCache).map(([code,value])=>({code,value}));
+        try{
+          idbDatabase.close();
+          idbDatabase=null;
+          await idbReplaceAll(kvRows,puzzleRows);
+          storageBackend='indexedDB';
+          storageMemory[STORAGE_KEYS.storageMaintenance]='idb-v3-compacted';
+          storageSerialized[STORAGE_KEYS.storageMaintenance]=JSON.stringify('idb-v3-compacted');
+        }catch(_){
+          try{idbDatabase=await openStorageDatabase();storageBackend='indexedDB'}catch(__){storageBackend='localStorage';kvRows.forEach(row=>localStorageWrite(row.key,row.value));puzzleRows.forEach(row=>localStorageWrite(`${STORAGE_KEYS.puzzleCache}.${row.code}`,row.value))}
+        }
+      }
+      const existingRecent=readStorage(STORAGE_KEYS.recentPuzzles,null);
+      const compactRecent=compactRecentItems(existingRecent);
+      if(Array.isArray(existingRecent)&&JSON.stringify(existingRecent)!==JSON.stringify(compactRecent))writeStorage(STORAGE_KEYS.recentPuzzles,compactRecent);
     }catch(_){
       storageBackend='localStorage';
       keys.forEach(key=>{const legacy=localStorageRead(key);if(legacy!==undefined)storageMemory[key]=legacy});
@@ -254,7 +335,10 @@
   }
   function readStorage(key,fallback){return Object.prototype.hasOwnProperty.call(storageMemory,key)?storageMemory[key]:fallback}
   function writeStorage(key,value){
+    const serialized=JSON.stringify(value);
     storageMemory[key]=value;
+    if(storageSerialized[key]===serialized)return true;
+    storageSerialized[key]=serialized;
     if(storageBackend==='indexedDB'){
       idbWrite(key,value).catch(()=>{storageBackend='localStorage';localStorageWrite(key,value)});
       return true;
@@ -275,7 +359,7 @@
     const liked=getLikedPuzzleStore();delete liked[normalized];saveLikedPuzzleStore(liked);
     const recent=readStorage(STORAGE_KEYS.recentPuzzles,[]);
     if(Array.isArray(recent))writeStorage(STORAGE_KEYS.recentPuzzles,recent.filter(record=>puzzleCodeOf(record)!==normalized));
-    const cache=getPuzzleCache();delete cache[normalized];writeStorage(STORAGE_KEYS.puzzleCache,cache);
+    const cache=getPuzzleCache();delete cache[normalized];savePuzzleCache(cache,[],[normalized]);
     const progress=getProgressStore();delete progress[normalized];writeStorage(STORAGE_KEYS.progress,progress);
     removedPuzzleCodes.delete(normalized);
     libraryItems=showingLiked?getLikedPuzzles():libraryItems.filter(record=>puzzleCodeOf(record)!==normalized);
@@ -283,7 +367,7 @@
     updateCurrentLikeButton();
     toast(`Removed ${normalized} from local storage.`);
   }
-  function saveLikedPuzzleStore(value){try{localStorage.setItem(STORAGE_KEYS.likedPuzzles,JSON.stringify(value));return JSON.stringify(readStorage(STORAGE_KEYS.likedPuzzles,{}))===JSON.stringify(value)}catch(_){return false}}
+  function saveLikedPuzzleStore(value){return writeStorage(STORAGE_KEYS.likedPuzzles,value)}
   
   function updateCurrentLikeButton(){
     const button=$('currentLikeBtn');
@@ -314,7 +398,8 @@
     updateCurrentLikeButton();
   }
 
-  function cacheRecentPuzzles(items){const recent=Array.isArray(items)?items.slice(0,RECENT_CACHE_LIMIT):[];if(recent.length)writeStorage(STORAGE_KEYS.recentPuzzles,recent)}
+  function compactRecentItems(items){return Array.isArray(items)?items.slice(0,RECENT_CACHE_LIMIT).map(({puzzle,...record})=>record):[]}
+  function cacheRecentPuzzles(items){const recent=compactRecentItems(items);if(recent.length)writeStorage(STORAGE_KEYS.recentPuzzles,recent)}
   function getCachedRecentPuzzles(){
     const cached=readStorage(STORAGE_KEYS.recentPuzzles,[]);
     if(Array.isArray(cached)&&cached.length)return cached.slice(0,RECENT_CACHE_LIMIT);
@@ -322,12 +407,14 @@
     return fallback.slice(0,RECENT_CACHE_LIMIT);
   }
   function getPuzzleCache(){const value=readStorage(STORAGE_KEYS.puzzleCache,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
+  function prunePuzzleCache(cache){const entries=Object.entries(cache&&typeof cache==='object'&&!Array.isArray(cache)?cache:{});entries.sort(([,a],[,b])=>Number(b?.updatedAt||0)-Number(a?.updatedAt||0));return Object.fromEntries(entries.slice(0,PUZZLE_CACHE_LIMIT))}
+  function savePuzzleCache(cache,changedCodes=[],removedCodes=[]){const pruned=prunePuzzleCache(cache);storageMemory[STORAGE_KEYS.puzzleCache]=pruned;const removed=new Set([...removedCodes,...Object.keys(cache||{}).filter(code=>!pruned[code])]);if(storageBackend==='indexedDB'&&idbDatabase?.objectStoreNames.contains(IDB_PUZZLE_STORE)){storageSerialized[STORAGE_KEYS.puzzleCache]=JSON.stringify(pruned);const entries=changedCodes.map(code=>({code,value:pruned[code]})).filter(entry=>entry.value);idbUpdatePuzzleRows(entries,[...removed]).catch(()=>{storageBackend='localStorage';localStorageWrite(STORAGE_KEYS.puzzleCache,pruned)});return true}return writeStorage(STORAGE_KEYS.puzzleCache,pruned)}
   function getCachedPuzzlePayload(code){return getPuzzleCache()[normalizeCode(code)]||null}
-  function cachePuzzlePayload(code,puzzle,record){if(!code||!puzzle)return;const cache=getPuzzleCache();cache[normalizeCode(code)]={code:normalizeCode(code),record:{...(record||{}),puzzle_number:normalizeCode(code)},puzzle,updatedAt:Date.now()};writeStorage(STORAGE_KEYS.puzzleCache,cache)}
+  function cachePuzzlePayload(code,puzzle,record){if(!code||!puzzle)return;const normalized=normalizeCode(code);const cache=getPuzzleCache();cache[normalized]={code:normalized,record:{...(record||{}),puzzle_number:normalized},puzzle,updatedAt:Date.now()};savePuzzleCache(cache,[normalized])}
   function currentDayKey(){return new Date().toISOString().slice(0,10)}
   function getFreshLibrarySnapshot(){const snapshot=readStorage(STORAGE_KEYS.librarySnapshot,null);if(!snapshot||snapshot.dayKey!==currentDayKey()||Date.now()-Number(snapshot.fetchedAt||0)>LIBRARY_CACHE_TTL_MS||!Array.isArray(snapshot.items)||!snapshot.items.length)return null;return snapshot}
   function cacheLibrarySnapshot(items,offset,hasMore,nextOffset){const compactItems=(items||[]).map(({puzzle,...record})=>record);writeStorage(STORAGE_KEYS.librarySnapshot,{dayKey:currentDayKey(),fetchedAt:Date.now(),items:compactItems,offset,hasMore,nextOffset})}
-  function cacheBatchPuzzlePayloads(items){(items||[]).forEach(item=>{const code=puzzleCodeOf(item);if(code&&item?.puzzle)cachePuzzlePayload(code,item.puzzle,item)})}
+  function cacheBatchPuzzlePayloads(items){const cache=getPuzzleCache(),changed=[];(items||[]).forEach(item=>{const code=puzzleCodeOf(item);if(code&&item?.puzzle){cache[code]={code,record:{...item,puzzle_number:code},puzzle:item.puzzle,updatedAt:Date.now()};changed.push(code)}});if(changed.length)savePuzzleCache(cache,changed)}
   function getLoadedBatchRecords(){
     const snapshot=getFreshLibrarySnapshot();
     const candidates=[...(snapshot?.items||[]),...(Array.isArray(libraryItems)?libraryItems:[])];
@@ -400,7 +487,8 @@
   function hasPlayerEntries(){return Boolean(state.puzzle&&state.values.some((v,i)=>!state.givens[i]&&v));}
   function restoreProgress(progress){if(!progress)return;state.values=Array.from({length:state.puzzle.total},(_,i)=>state.givens[i]?state.givens[i]:num(progress.values?.[i]));state.notes=Array.from({length:state.puzzle.total},(_,i)=>new Set(Array.isArray(progress.notes?.[i])?progress.notes[i].map(num).filter(Boolean):[]));state.elapsed=hasPlayerEntries()?Math.max(0,Number(progress.elapsed)||0):0;state.mistakes=Math.max(0,Number(progress.mistakes)||0);state.status=['Not Started','In Progress','Solved'].includes(progress.status)?progress.status:(hasPlayerEntries()?'In Progress':'Not Started');if(!hasPlayerEntries()&&state.status!=='Solved')state.status='Not Started';state.finished=state.status==='Solved'}
   function syncStatusAfterChange(){state.finished=false;state.status=isSolved()?'Solved':'In Progress';if(state.status==='Solved')state.finished=true;persistProgress();renderLibrary()}
-  function persistProgress(){if(!state.currentPuzzleCode||!state.puzzle)return;const progress=getProgressStore();progress[state.currentPuzzleCode]=currentProgressRecord();writeStorage(STORAGE_KEYS.progress,progress)}
+  let lastProgressWriteAt=0;
+  function persistProgress({immediate=true}={}){if(!state.currentPuzzleCode||!state.puzzle)return;const now=Date.now();if(!immediate&&now-lastProgressWriteAt<PROGRESS_WRITE_INTERVAL_MS)return;lastProgressWriteAt=now;const progress=getProgressStore();progress[state.currentPuzzleCode]=currentProgressRecord();writeStorage(STORAGE_KEYS.progress,progress)}
   function setStatusFromState(){if(state.status==='Solved')setStatus('Solved','Puzzle complete — every required cell is correct.','ok');else if(state.status==='In Progress')setStatus('In Progress','Your progress is being saved automatically.','');else setStatus('Not Started','Select a cell and enter a number.','')}
 
   function apiReady(){return API_BASE_URL && !API_BASE_URL.includes('PASTE_YOUR_WORKER_URL_HERE')}
@@ -888,7 +976,7 @@
       if(!state.finished&&state.puzzle){
         state.elapsed=liveElapsed();
         $('timerStat').textContent=formatTime(state.elapsed);
-        persistProgress();
+        persistProgress({immediate:false});
       }
     },1000);
   }

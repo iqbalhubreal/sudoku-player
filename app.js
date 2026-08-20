@@ -85,6 +85,89 @@
     puzzleCache: 'lovdoku.puzzle-cache.v1',
     fontSettings: 'lovdoku.font-settings.v1'
   };
+  const STORAGE_DB_NAME = 'lovdoku-storage';
+  const STORAGE_DB_VERSION = 1;
+  const STORAGE_OBJECT_STORE = 'keyValue';
+  const storageMemory = Object.create(null);
+  let storageDb = null;
+  let storageFallbackToLocalStorage = false;
+  let storageWriteChain = Promise.resolve();
+
+  function readLegacyStorageValue(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw === null ? undefined : JSON.parse(raw);
+    } catch (_) {
+      return undefined;
+    }
+  }
+
+  Object.values(STORAGE_KEYS).forEach(key => {
+    const value = readLegacyStorageValue(key);
+    if (value !== undefined) storageMemory[key] = value;
+  });
+
+  function openStorageDatabase() {
+    return new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) {
+        reject(new Error('IndexedDB is unavailable.'));
+        return;
+      }
+      const request = indexedDB.open(STORAGE_DB_NAME, STORAGE_DB_VERSION);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains(STORAGE_OBJECT_STORE)) {
+          request.result.createObjectStore(STORAGE_OBJECT_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB could not be opened.'));
+    });
+  }
+
+  function readIndexedDbValue(db, key) {
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(STORAGE_OBJECT_STORE, 'readonly').objectStore(STORAGE_OBJECT_STORE).get(key);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB read failed.'));
+    });
+  }
+
+  function writeIndexedDbValue(db, key, value) {
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(STORAGE_OBJECT_STORE, 'readwrite').objectStore(STORAGE_OBJECT_STORE).put(value, key);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error || new Error('IndexedDB write failed.'));
+    });
+  }
+
+  async function initializeStorage() {
+    try {
+      const db = await openStorageDatabase();
+      const legacyValues = Object.values(STORAGE_KEYS).map(key => [key, readLegacyStorageValue(key)]);
+      const storedValues = await Promise.all(Object.values(STORAGE_KEYS).map(key => readIndexedDbValue(db, key)));
+      Object.values(STORAGE_KEYS).forEach((key, index) => {
+        if (storedValues[index] !== undefined) storageMemory[key] = storedValues[index];
+      });
+      storageDb = db;
+      await Promise.all(legacyValues.map(async ([key, value]) => {
+        if (storedValues[Object.values(STORAGE_KEYS).indexOf(key)] === undefined && value !== undefined) {
+          await writeIndexedDbValue(db, key, value);
+          storageMemory[key] = value;
+        }
+      }));
+      legacyValues.forEach(([key]) => {
+        try { localStorage.removeItem(key); } catch (_) {}
+      });
+      return true;
+    } catch (error) {
+      storageFallbackToLocalStorage = true;
+      console.warn('IndexedDB unavailable; using localStorage fallback.', error);
+      return false;
+    }
+  }
+
+  const storageReady = initializeStorage();
+
   const RECENT_CACHE_LIMIT = 5;
   let libraryItems = [];
   let libraryOffset = 0;
@@ -176,8 +259,20 @@
     if (settings.thickLineColor) document.documentElement.style.setProperty('--thick-line-color', settings.thickLineColor);
   }
 
-  function readStorage(key,fallback){try{const value=JSON.parse(localStorage.getItem(key)||'null');return value??fallback}catch(_){return fallback}}
-  function writeStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(_){return false}}
+  function readStorage(key,fallback){return Object.prototype.hasOwnProperty.call(storageMemory,key)?storageMemory[key]:fallback}
+  function writeStorage(key,value){
+    storageMemory[key] = value;
+    if (storageDb && !storageFallbackToLocalStorage) {
+      storageWriteChain = storageWriteChain.then(() => writeIndexedDbValue(storageDb, key, value)).catch(error => {
+        storageFallbackToLocalStorage = true;
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+        console.warn('IndexedDB write failed; switched to localStorage fallback.', error);
+      });
+    } else {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { return false; }
+    }
+    return true;
+  }
   function getProgressStore(){const value=readStorage(STORAGE_KEYS.progress,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getProgress(code){return getProgressStore()[code]||null}
   function puzzleCodeOf(record){return normalizeCode(record?.puzzle_number||record?.puzzleNumber||record?.code)}
@@ -197,7 +292,7 @@
     updateCurrentLikeButton();
     toast(`Removed ${normalized} from local storage.`);
   }
-  function saveLikedPuzzleStore(value){try{localStorage.setItem(STORAGE_KEYS.likedPuzzles,JSON.stringify(value));return JSON.stringify(readStorage(STORAGE_KEYS.likedPuzzles,{}))===JSON.stringify(value)}catch(_){return false}}
+  function saveLikedPuzzleStore(value){writeStorage(STORAGE_KEYS.likedPuzzles,value);return JSON.stringify(readStorage(STORAGE_KEYS.likedPuzzles,{}))===JSON.stringify(value)}
   
   function updateCurrentLikeButton(){
     const button=$('currentLikeBtn');
@@ -1312,8 +1407,9 @@
     });
   }
 
-  function init() {
+  async function init() {
     setupPwa();
+    await storageReady;
     loadFontSettings();
     setupEventListeners();
     window.noticeCarousel?.initialize();

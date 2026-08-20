@@ -101,7 +101,7 @@
 
   const defaultFontSettings = {
     family: "'Plus Jakarta Sans', sans-serif",
-    sizePct: 65,
+    sizePct: 75,
     weight: '700',
     entryColor: '#1d4ed8',
     notesPct: 20
@@ -112,7 +112,9 @@
     const saved = readStorage(STORAGE_KEYS.fontSettings, null);
     if (saved && typeof saved === 'object') {
       fontSettings.family = saved.family || defaultFontSettings.family;
-      fontSettings.sizePct = Math.min(90, Math.max(40, Number(saved.sizePct) || 65));
+      const savedSizePct = Number(saved.sizePct);
+      const savedSizeDefaultVersion = Number(saved.sizeDefaultVersion) || 0;
+      fontSettings.sizePct = savedSizePct === 65 && savedSizeDefaultVersion < 2 ? defaultFontSettings.sizePct : (Number.isFinite(savedSizePct) ? Math.min(90, Math.max(40, Math.round(savedSizePct))) : defaultFontSettings.sizePct);
       fontSettings.weight = String(saved.weight || '700');
       fontSettings.entryColor = /^#[0-9a-f]{6}$/i.test(saved.entryColor || '') ? saved.entryColor : defaultFontSettings.entryColor;
       const savedNotesPct = Number(saved.notesPct);
@@ -122,7 +124,7 @@
   }
 
   function saveFontSettings() {
-    writeStorage(STORAGE_KEYS.fontSettings, fontSettings);
+    writeStorage(STORAGE_KEYS.fontSettings, {...fontSettings, sizeDefaultVersion: 2});
     applyFontSettings();
   }
 
@@ -158,6 +160,7 @@
     
     if (cellHeight > 0) {
       const cellWidth = firstCell?.getBoundingClientRect().width || cellHeight;
+      document.documentElement.style.setProperty('--cell-size-px', `${cellHeight}px`);
       const requestedPx = cellHeight * (fontSettings.sizePct / 100);
       const computedPx = Math.max(8, Math.min(requestedPx, cellHeight * 0.8, cellWidth * 0.82));
       document.documentElement.style.setProperty('--cell-font-size-px', `${computedPx}px`);

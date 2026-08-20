@@ -107,7 +107,7 @@
     sizePct: 75,
     weight: '700',
     entryColor: '#1d4ed8',
-    notesPct: 20
+    notesPct: 25
   };
   let fontSettings = {...defaultFontSettings};
 

@@ -505,6 +505,13 @@
     }
   }
 
+  function focusPuzzleBoard(){
+    const target=document.querySelector('.play-card')||$('board');
+    if(!target||!state.puzzle)return;
+    const scroll=()=>target.scrollIntoView({behavior:'smooth',block:'start'});
+    requestAnimationFrame(()=>{scroll();setTimeout(scroll,350)});
+  }
+
   async function openRemotePuzzle(recordOrCode){
     const record=typeof recordOrCode==='string'?{puzzle_number:recordOrCode}:recordOrCode||{};
     const code=puzzleCodeOf(record);
@@ -1425,7 +1432,7 @@
     setupEventListeners();
     window.noticeCarousel?.initialize();
     const sharedPuzzleCode=sharedPuzzleCodeFromUrl();
-    if(sharedPuzzleCode)openRemotePuzzle(sharedPuzzleCode);
+    if(sharedPuzzleCode)openRemotePuzzle(sharedPuzzleCode).then(()=>focusPuzzleBoard());
     if(!renderCachedLibraryImmediately())fetchLibrary({ reset: true });
   }
 

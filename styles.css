@@ -1003,6 +1003,12 @@ button { border: 0; cursor: pointer; }
   z-index: 10;
 }
 
+/* Keep the full-screen viewport dark while making the puzzle surface opaque and readable. */
+.fullscreen-overlay .board,
+.fullscreen-overlay .board.multi {
+  background: #ffffff;
+}
+
 .fullscreen-overlay .keypad { margin: 0; max-width: 500px; width: 100%; }
 .fullscreen-overlay .board-notes-control { margin: 0; color: #94a3b8; }
 

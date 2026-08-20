@@ -466,6 +466,13 @@
       document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
       return;
     }
+    const cached=getCachedPuzzlePayload(code);
+    if(cached?.puzzle){
+      const cachedRecord={puzzle_number:code,...(cached.record||record)};
+      load(cached.puzzle,{code,record:cachedRecord,progress:getProgress(code)});
+      document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
+      return;
+    }
     try{
       const data=await apiFetch(`/puzzles/${encodeURIComponent(code)}`);
       const normalizedCode=data.puzzleNumber||code;
@@ -474,13 +481,6 @@
       load(data.puzzle,{code:normalizedCode,record:fullRecord,progress:getProgress(normalizedCode)});
       document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
     }catch(err){
-      const cached=getCachedPuzzlePayload(code);
-      if(cached?.puzzle){
-        const cachedRecord={puzzle_number:code,...(cached.record||record)};
-        load(cached.puzzle,{code,record:cachedRecord,progress:getProgress(code)});
-        document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
-        return;
-      }
       if(err.status===404){
         const isSavedLiked=isLiked(code)||showingLiked;
         if(isSavedLiked){
@@ -506,8 +506,11 @@
 
   function progressLinkText(){
     const code=state.currentPuzzleCode||'puzzle';
-    const siteUrl=`${window.location.origin}/`;
-    return `Puzzle Number: ${code}\nLink: ${siteUrl}`;
+    const url=new URL(window.location.href);
+    url.search='';
+    url.hash='';
+    url.searchParams.set('puzzle',code);
+    return `Puzzle Number: ${code}\nLink: ${url.toString()}`;
   }
 
   async function copyProgressLink(){
@@ -1407,6 +1410,17 @@
     });
   }
 
+  async function openPuzzleFromUrl(){
+    const code=normalizeCode(new URLSearchParams(window.location.search).get('puzzle'));
+    if(!code)return false;
+    if(!validCode(code)){
+      toast('This shared puzzle link is invalid.');
+      return false;
+    }
+    await openRemotePuzzle(code);
+    return true;
+  }
+
   async function init() {
     setupPwa();
     await storageReady;
@@ -1414,7 +1428,8 @@
     setupEventListeners();
     window.noticeCarousel?.initialize();
     renderCachedLibraryImmediately();
-    fetchLibrary({ reset: true });
+    const sharedPuzzleOpened=await openPuzzleFromUrl();
+    if(!sharedPuzzleOpened)fetchLibrary({ reset: true });
   }
 
   if (document.readyState === 'loading') {

@@ -642,7 +642,7 @@ button { border: 0; cursor: pointer; }
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: repeat(3, minmax(0, 1fr));
   color: #64748b;
-  font-size: clamp(6px, calc(var(--cell-size-px) * var(--notes-font-scale)), 14px);
+  font-size: clamp(3px, calc(var(--cell-size-px) * var(--notes-font-scale)), 14px);
   font-family: var(--board-font-family);
   font-weight: var(--board-font-weight);
   line-height: 0.9;

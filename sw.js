@@ -5,7 +5,6 @@ const APP_SHELL = [
   './styles.css',
   './app.js',
   './notice-carousel.js',
-  './html2canvas.min.js',
   './notice-config.json',
   './manifest.webmanifest',
   './icons/icon-192.png',

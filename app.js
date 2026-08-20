@@ -987,9 +987,8 @@
     overlay.setAttribute('aria-hidden', 'false');
     syncPopupScrollLock();
 
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
+    // Use the app-level fullscreen overlay instead of native browser fullscreen.
+    // This preserves the dark theater layout without triggering the browser popup.
 
     updateFsTitle();
     updateFsGridOptions();
@@ -1016,9 +1015,7 @@
     overlay.setAttribute('aria-hidden', 'true');
     syncPopupScrollLock();
 
-    if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
-    }
+    // Theater mode does not enter native browser fullscreen.
 
     render();
   }

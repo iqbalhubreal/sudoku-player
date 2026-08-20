@@ -409,25 +409,6 @@ button { border: 0; cursor: pointer; }
   align-items: start;
 }
 
-.share-capture-stage {
-  position: fixed;
-  left: -100000px;
-  top: 0;
-  z-index: -1;
-  box-sizing: border-box;
-  padding: 24px 16px 18px;
-  background: #f1f5f9;
-  color: var(--ink);
-}
-
-.share-capture-stage .layout {
-  width: 100%;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 24px;
-}
-
-.share-capture-stage .footer { margin-top: 28px; }
-
 .play-card {
   padding: 24px;
 }
@@ -483,8 +464,6 @@ button { border: 0; cursor: pointer; }
   font-size: 12px;
   border-radius: 8px;
 }
-
-.current-share-btn:disabled { opacity: .7; cursor: wait; }
 
 .current-like-btn.liked {
   color: var(--bad);

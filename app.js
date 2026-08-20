@@ -492,10 +492,11 @@
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lovdoku-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
   }
 
-  function progressLinkText(){
-    const code=state.currentPuzzleCode||'puzzle';
-    const siteUrl=`${window.location.origin}/`;
-    return `Puzzle Number: ${code}\nLink: ${siteUrl}`;
+  function puzzleShareUrl(){
+    const url=new URL(window.location.href);
+    url.search='';
+    if(state.currentPuzzleCode)url.searchParams.set('puzzle',normalizeCode(state.currentPuzzleCode));
+    return url.toString();
   }
   async function copyText(text){
     try{
@@ -503,72 +504,30 @@
       const textarea=document.createElement('textarea');textarea.value=text;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const copied=document.execCommand('copy');textarea.remove();return copied;
     }catch(_){return false}
   }
-  async function copyProgressLink(){return copyText(progressLinkText())}
-
-  const SHARE_IMAGE_WORKER_SOURCE=`self.onmessage=async(event)=>{const {bitmap,type='image/jpeg',quality=.88}=event.data||{};try{if(!bitmap||typeof OffscreenCanvas==='undefined')throw new Error('Worker image processing is unavailable.');const canvas=new OffscreenCanvas(bitmap.width,bitmap.height);const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('Could not create the worker canvas.');context.drawImage(bitmap,0,0);bitmap.close?.();const blob=await canvas.convertToBlob({type,quality});self.postMessage({ok:true,blob})}catch(error){bitmap?.close?.();self.postMessage({ok:false,error:error?.message||'Worker image processing failed.'})}};self.postMessage({ready:true});`;
-
-  function encodeShareImage(canvas){
-    const fallback=()=>new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
-    if(typeof Worker==='undefined'||typeof createImageBitmap!=='function'||typeof OffscreenCanvas==='undefined')return fallback();
-    return new Promise(async(resolve,reject)=>{
-      let worker=null;
-      let workerUrl=null;
-      let bitmap=null;
-      const finish=()=>{worker?.terminate();if(workerUrl)URL.revokeObjectURL(workerUrl)};
-      const fallbackFromWorker=()=>{finish();fallback().then(resolve,reject)};
-      try{
-        workerUrl=URL.createObjectURL(new Blob([SHARE_IMAGE_WORKER_SOURCE],{type:'application/javascript'}));
-        worker=new Worker(workerUrl);
-        worker.onmessage=event=>{
-          if(event.data?.ready)return;
-          if(event.data?.ok){finish();resolve(event.data.blob)}else fallbackFromWorker();
-        };
-        worker.onerror=()=>fallbackFromWorker();
-        bitmap=await createImageBitmap(canvas);
-        worker.postMessage({bitmap,type:'image/jpeg',quality:.88},[bitmap]);
-        bitmap=null;
-      }catch(error){
-        bitmap?.close?.();
-        finish();
-        fallback().then(resolve,reject);
-      }
-    });
-  }
-
-  async function downloadShareImage(){
-    if(!state.puzzle){toast('Choose a puzzle first.');return}
-    if(!window.html2canvas){toast('The share image tool is still loading.');return}
-    const layout=document.querySelector('main.layout');
-    const footer=document.querySelector('.footer');
-    const button=$('shareBtn');
-    if(!layout||!footer)return;
-    if(state.fsActive){toast('Exit fullscreen before downloading the share image.');return}
-    if(button){button.disabled=true;button.textContent='Preparing…'}
-    const copyPromise=copyProgressLink();
-    const stage=document.createElement('div');
-    const captureWidth=Math.max(900,Math.min(1200,document.documentElement.clientWidth||1200));
-    stage.className='share-capture-stage';
-    stage.style.width=`${captureWidth}px`;
-    stage.append(layout.cloneNode(true),footer.cloneNode(true));
-    stage.querySelector('#shareBtn')?.remove();
-    document.body.appendChild(stage);
+  async function sharePuzzleLink(){
+    if(!state.currentPuzzleCode){toast('Choose a puzzle first.');return}
+    const url=puzzleShareUrl();
+    const shareData={title:`Lovdoku Puzzle ${normalizeCode(state.currentPuzzleCode)}`,text:`Play Lovdoku puzzle ${normalizeCode(state.currentPuzzleCode)}`,url};
     try{
-      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-      const canvas=await window.html2canvas(stage,{backgroundColor:'#f1f5f9',scale:1.35,useCORS:true,allowTaint:false,logging:false,imageTimeout:0});
-      const blob=await encodeShareImage(canvas);
-      if(!blob)throw new Error('Image creation failed.');
-      const url=URL.createObjectURL(blob),a=document.createElement('a');
-      a.href=url;a.download=`${state.currentPuzzleCode||'puzzle'}.jpg`;a.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-      const copied=await copyPromise;
-      toast(copied?'Share image downloaded and progress link copied.':'Share image downloaded. Progress link could not be copied.',5000);
-    }catch(err){
-      console.error('Share image download failed',err);
-      toast('Could not create the share image.');
-    }finally{
-      stage.remove();
-      if(button){button.disabled=false;button.textContent='⇩ Share'}
+      if(typeof navigator.share==='function'){
+        await navigator.share(shareData);
+        return;
+      }
+    }catch(error){
+      if(error?.name==='AbortError')return;
     }
+    const copied=await copyText(url);
+    toast(copied?'Puzzle link copied.':'Could not share or copy the puzzle link.',3500);
+  }
+  function sharedPuzzleCodeFromUrl(){
+    const params=new URLSearchParams(window.location.search);
+    if(!params.has('puzzle'))return null;
+    const raw=params.get('puzzle')?.trim().toUpperCase()||'';
+    if(!validCode(raw)){
+      toast('The shared puzzle link is invalid. Puzzle numbers must look like A1234.',5000);
+      return '';
+    }
+    return raw;
   }
 
   async function importProgressFile(file){
@@ -1293,7 +1252,7 @@
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
-    $('shareBtn')?.addEventListener('click', downloadShareImage);
+    $('shareBtn')?.addEventListener('click', sharePuzzleLink);
     $('appDialogConfirm')?.addEventListener('click', () => resolveAppDialog(true));
     $('appDialogCancel')?.addEventListener('click', () => resolveAppDialog(false));
     $('appDialogDismiss')?.addEventListener('click', () => resolveAppDialog(false));
@@ -1402,6 +1361,15 @@
     loadFontSettings();
     setupEventListeners();
     window.noticeCarousel?.initialize();
+    const sharedPuzzleCode=sharedPuzzleCodeFromUrl();
+    if(sharedPuzzleCode){
+      openRemotePuzzle(sharedPuzzleCode);
+      return;
+    }
+    if(sharedPuzzleCode===''){
+      if(!renderCachedLibraryImmediately())fetchLibrary({ reset: true });
+      return;
+    }
     if(!renderCachedLibraryImmediately())fetchLibrary({ reset: true });
   }
 

@@ -1426,14 +1426,7 @@
     setupEventListeners();
     window.noticeCarousel?.initialize();
     const sharedPuzzleCode=sharedPuzzleCodeFromUrl();
-    if(sharedPuzzleCode){
-      openRemotePuzzle(sharedPuzzleCode);
-      return;
-    }
-    if(sharedPuzzleCode===''){
-      if(!renderCachedLibraryImmediately())fetchLibrary({ reset: true });
-      return;
-    }
+    if(sharedPuzzleCode)openRemotePuzzle(sharedPuzzleCode);
     if(!renderCachedLibraryImmediately())fetchLibrary({ reset: true });
   }
 

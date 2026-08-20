@@ -1377,8 +1377,7 @@
 
     $('fontSizeRange')?.addEventListener('input', (e) => {
       fontSettings.sizePct = Number(e.target.value);
-      if ($('fontSizeValDisplay')) $('fontSizeValDisplay').textContent = `${fontSettings.sizePct}%`;
-      updateFontPreviewCell();
+      applyFontSettings();
     });
 
     $('fontWeightSelect')?.addEventListener('change', (e) => {

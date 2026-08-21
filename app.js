@@ -104,24 +104,20 @@
 
   const defaultFontSettings = {
     family: "'Plus Jakarta Sans', sans-serif",
-    sizePct: 75,
+    sizePct: 70,
     weight: '700',
     entryColor: '#1d4ed8',
-    notesPct: 25
+    notesPct: 20
   };
   let fontSettings = {...defaultFontSettings};
 
   function loadFontSettings() {
     const saved = readStorage(STORAGE_KEYS.fontSettings, null);
+    fontSettings = {...defaultFontSettings};
     if (saved && typeof saved === 'object') {
       fontSettings.family = saved.family || defaultFontSettings.family;
-      const savedSizePct = Number(saved.sizePct);
-      const savedSizeDefaultVersion = Number(saved.sizeDefaultVersion) || 0;
-      fontSettings.sizePct = savedSizePct === 65 && savedSizeDefaultVersion < 2 ? defaultFontSettings.sizePct : (Number.isFinite(savedSizePct) ? Math.min(90, Math.max(40, Math.round(savedSizePct))) : defaultFontSettings.sizePct);
-      fontSettings.weight = String(saved.weight || '700');
+      fontSettings.weight = String(saved.weight || defaultFontSettings.weight);
       fontSettings.entryColor = /^#[0-9a-f]{6}$/i.test(saved.entryColor || '') ? saved.entryColor : defaultFontSettings.entryColor;
-      const savedNotesPct = Number(saved.notesPct);
-      fontSettings.notesPct = Number.isFinite(savedNotesPct) ? Math.min(35, Math.max(10, Math.round(savedNotesPct))) : defaultFontSettings.notesPct;
     }
     applyFontSettings();
   }
@@ -139,12 +135,8 @@
     document.documentElement.style.setProperty('--notes-font-scale', String(fontSettings.notesPct / 100));
     
     if ($('fontFamilySelect')) $('fontFamilySelect').value = fontSettings.family;
-    if ($('fontSizeRange')) $('fontSizeRange').value = fontSettings.sizePct;
-    if ($('fontSizeValDisplay')) $('fontSizeValDisplay').textContent = `${fontSettings.sizePct}%`;
     if ($('fontWeightSelect')) $('fontWeightSelect').value = fontSettings.weight;
     if ($('entryColorSelect')) $('entryColorSelect').value = fontSettings.entryColor;
-    if ($('notesSizeRange')) $('notesSizeRange').value = fontSettings.notesPct;
-    if ($('notesSizeValDisplay')) $('notesSizeValDisplay').textContent = `${fontSettings.notesPct}%`;
 
     updateCellFontSizePx();
     updateFontPreviewCell();
@@ -1300,213 +1292,6 @@
     }
   }
 
-  const VIDEO_EXPORT_RATIOS = {
-    '1:1': { width: 2560, height: 2560, filePart: '1x1' },
-    '9:16': { width: 1440, height: 2560, filePart: '9x16' },
-    '16:9': { width: 2560, height: 1440, filePart: '16x9' }
-  };
-  const VIDEO_EXPORT_FPS = 24;
-  const VIDEO_VIEW_SECONDS = 2;
-  const VIDEO_INTRO_SECONDS = 2;
-  const VIDEO_INTRO_PAUSE_SECONDS = 1;
-  const VIDEO_TRANSITION_SECONDS = 0.32;
-  let videoExporting = false;
-  let videoExportRatio = '16:9';
-
-  function setVideoExportDialogOpen(open) {
-    const dialog = $('videoExportDialog');
-    if (!dialog) return;
-    dialog.hidden = !open;
-    dialog.setAttribute('aria-hidden', open ? 'false' : 'true');
-    syncPopupScrollLock();
-  }
-
-  function setVideoExportStatus(message, tone = '') {
-    const status = $('videoExportStatus');
-    if (!status) return;
-    status.textContent = message || '';
-    status.dataset.tone = tone;
-  }
-
-  function setVideoExporting(exporting) {
-    videoExporting = exporting;
-    const button = $('videoExportBtn');
-    const create = $('videoExportCreateBtn');
-    const close = $('videoExportCloseBtn');
-    const cancel = $('videoExportCancelBtn');
-    if (button) {
-      button.disabled = exporting;
-      button.setAttribute('aria-busy', exporting ? 'true' : 'false');
-      button.classList.toggle('exporting', exporting);
-      button.textContent = exporting ? 'Generating 2K Video…' : 'Export 2K Video';
-    }
-    if (create) {
-      create.disabled = exporting;
-      create.textContent = exporting ? 'Generating…' : 'Create Video';
-    }
-    if (close) close.disabled = exporting;
-    if (cancel) cancel.disabled = exporting;
-  }
-
-  function videoCssVar(name, fallback) {
-    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return value || fallback;
-  }
-
-  function cloneVideoPuzzle(puzzle) {
-    return {
-      raw: puzzle.raw,
-      mode: puzzle.mode,
-      layout: puzzle.layout.map(grid => ({...grid, customShadingGroups: (grid.customShadingGroups || []).map(group => ({...group, cells: [...(group.cells || [])]})), constraintGroups: (grid.constraintGroups || []).map(group => ({...group, cells: [...(group.cells || [])]}))})),
-      map: { coords: puzzle.map.coords.map(coord => [...coord]), gridCellIndices: puzzle.map.gridCellIndices.map(row => [...row]) },
-      total: puzzle.total,
-      owners: puzzle.owners.map(list => list.map(owner => ({...owner, groups: (owner.groups || []).map(group => ({...group, cells: [...(group.cells || [])]})), constraintGroups: (owner.constraintGroups || []).map(group => ({...group, cells: [...(group.cells || [])]}))}))),
-      colors: {...(puzzle.colors || {}), constraintBackgrounds: {...(puzzle.colors?.constraintBackgrounds || {})}},
-      settings: {...(puzzle.settings || {})},
-      type: puzzle.type,
-      label: puzzle.label,
-      difficulty: puzzle.difficulty,
-      customGroups: (puzzle.customGroups || []).map(group => ({...group, cells: [...(group.cells || [])]})),
-      constraintGroups: (puzzle.constraintGroups || []).map(group => ({...group, cells: [...(group.cells || [])]}))
-    };
-  }
-
-  function videoSnapshot() {
-    if (!state.puzzle || !state.currentPuzzleCode) return null;
-    const snapshot = {
-      puzzle: cloneVideoPuzzle(state.puzzle),
-      givens: [...state.givens],
-      values: [...state.values],
-      notes: state.notes.map(set => [...set]),
-      code: state.currentPuzzleCode,
-      visual: {
-        given: videoCssVar('--given', '#0f172a'),
-        entry: videoCssVar('--entry', '#1d4ed8'),
-        thin: videoCssVar('--thin-line-color', '#cbd5e1'),
-        thick: videoCssVar('--thick-line-color', '#1e293b'),
-        boardFont: videoCssVar('--board-font-family', "'Plus Jakarta Sans', sans-serif"),
-        boardWeight: videoCssVar('--board-font-weight', '700'),
-        cellFontPct: Math.min(90, Math.max(40, Number(fontSettings.sizePct) || 75)),
-        notesPct: Math.min(35, Math.max(10, Number(fontSettings.notesPct) || 25))
-      }
-    };
-    snapshot.cellColors = snapshot.puzzle.map.coords.map((_, index) => {
-      const owners = snapshot.puzzle.owners[index] || [];
-      for (const owner of owners) {
-        const color = ownerColor(owner, index);
-        if (color) return color;
-      }
-      return '';
-    });
-    snapshot.revealOrder = makeVideoRevealOrder(snapshot);
-    return snapshot;
-  }
-
-  function makeVideoRevealOrder(snapshot) {
-    const indices = snapshot.givens.map((value, index) => value || snapshot.values[index] ? index : -1).filter(index => index >= 0);
-    let seed = Array.from(String(snapshot.code || 'CUSTOM')).reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 17);
-    const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    for (let index = indices.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(random() * (index + 1));
-      [indices[index], indices[swapIndex]] = [indices[swapIndex], indices[index]];
-    }
-    return indices;
-  }
-
-  function videoLayout(snapshot) {
-    const coords = snapshot.puzzle.map.coords;
-    const rows = coords.map(coord => coord[0]);
-    const cols = coords.map(coord => coord[1]);
-    const minR = Math.min(...rows), minC = Math.min(...cols);
-    const records = [];
-    const seen = new Set();
-    coords.forEach(([row, col]) => {
-      const index = snapshot.puzzle.map.coords.findIndex(coord => coord[0] === row && coord[1] === col);
-      const key = `${row},${col}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      records.push({ index, row: row - minR, col: col - minC, localRow: row, localCol: col, owners: snapshot.puzzle.owners[index] || [] });
-    });
-    return { records, width: Math.max(...cols) - minC + 1, height: Math.max(...rows) - minR + 1, minR, minC };
-  }
-
-  function videoSequence(snapshot) {
-    if (snapshot.puzzle.mode !== 'multi_grid') return [{kind: 'all'}];
-    return [{kind: 'all'}, ...snapshot.puzzle.layout.map((_, index) => ({kind: 'focus', index})), {kind: 'all'}];
-  }
-
-  function videoCamera(snapshot, view, layout, width, height) {
-    const paddingX = view.kind === 'focus' ? 270 : 190;
-    const paddingTop = view.kind === 'focus' ? 190 : 170;
-    const paddingBottom = 180;
-    const availableWidth = width - paddingX * 2;
-    const availableHeight = height - paddingTop - paddingBottom;
-    let cellSize = Math.max(1, Math.floor(Math.min(availableWidth / layout.width, availableHeight / layout.height)));
-    let originX = Math.round((width - layout.width * cellSize) / 2);
-    let originY = Math.round(paddingTop + (availableHeight - layout.height * cellSize) / 2);
-    if (view.kind === 'focus' && snapshot.puzzle.mode === 'multi_grid') {
-      const grid = snapshot.puzzle.layout[view.index] || snapshot.puzzle.layout[0];
-      cellSize = Math.max(1, Math.floor(Math.min(availableWidth / 9, availableHeight / 9)));
-      const focusX = (grid.c0 - layout.minC) + 4.5;
-      const focusY = (grid.r0 - layout.minR) + 4.5;
-      originX = Math.round(width / 2 - focusX * cellSize);
-      originY = Math.round(paddingTop + availableHeight / 2 - focusY * cellSize);
-    }
-    return {cellSize, originX, originY};
-  }
-
-  function videoEase(value) { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); }
-  function videoInterpolate(from, to, amount) { return {cellSize: from.cellSize + (to.cellSize - from.cellSize) * amount, originX: from.originX + (to.originX - from.originX) * amount, originY: from.originY + (to.originY - from.originY) * amount}; }
-  function videoRoundedRect(ctx, x, y, width, height, radius) { const r = Math.min(radius, width / 2, height / 2); ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+width-r,y);ctx.quadraticCurveTo(x+width,y,x+width,y+r);ctx.lineTo(x+width,y+height-r);ctx.quadraticCurveTo(x+width,y+height,x+width-r,y+height);ctx.lineTo(x+r,y+height);ctx.quadraticCurveTo(x,y+height,x,y+height-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath(); }
-
-  function drawVideoBackground(ctx, width, height) {
-    const gradient = ctx.createLinearGradient(0, 0, width, height); gradient.addColorStop(0, '#111827'); gradient.addColorStop(.5, '#1e1b4b'); gradient.addColorStop(1, '#0f172a'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height);
-    const glow = ctx.createRadialGradient(width * .13, height * .1, 20, width * .13, height * .1, width * .3); glow.addColorStop(0, 'rgba(129,140,248,.25)'); glow.addColorStop(1, 'rgba(129,140,248,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, width, height);
-    const teal = ctx.createRadialGradient(width * .88, height * .86, 20, width * .88, height * .86, width * .34); teal.addColorStop(0, 'rgba(45,212,191,.15)'); teal.addColorStop(1, 'rgba(45,212,191,0)'); ctx.fillStyle = teal; ctx.fillRect(0, 0, width, height);
-  }
-
-  function drawVideoHeader(ctx, snapshot, width) {
-    ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.font = `800 ${Math.max(24, Math.floor(width * .018))}px ${snapshot.visual.boardFont}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('LOVDOKU', width * .055, width * .045);
-    ctx.fillStyle = 'rgba(226,232,240,.9)'; ctx.font = `600 ${Math.max(16, Math.floor(width * .009))}px ${snapshot.visual.boardFont}`; ctx.fillText(`#${snapshot.code}`, width * .055, width * .08);
-  }
-
-  function drawVideoFrame(ctx, snapshot, view, width, height, revealSet = null, cameraOverride = null) {
-    const layout = videoLayout(snapshot); if (!layout.records.length) return;
-    const camera = cameraOverride || videoCamera(snapshot, view, layout, width, height); const {cellSize, originX, originY} = camera; const boardWidth = layout.width * cellSize; const boardHeight = layout.height * cellSize; const scale = Math.max(.25, Math.min(1.45, 9 / Math.max(1, layout.width, layout.height))); const thinWidth = Math.max(1, scale); const thickWidth = Math.max(2, 3 * scale); const recordByCoord = new Map(layout.records.map(record => [`${record.row},${record.col}`, record]));
-    ctx.save();
-    if (snapshot.puzzle.mode !== 'multi_grid') { ctx.save(); ctx.shadowColor='rgba(0,0,0,.34)';ctx.shadowBlur=34;ctx.shadowOffsetY=18;ctx.fillStyle='#fff';videoRoundedRect(ctx,originX,originY,boardWidth,boardHeight,Math.min(26,cellSize*.15));ctx.fill();ctx.restore(); }
-    for (const record of layout.records) {
-      const x = originX + record.col * cellSize, y = originY + record.row * cellSize; ctx.fillStyle = snapshot.cellColors[record.index] || '#fff'; ctx.fillRect(x,y,cellSize,cellSize);
-      const visible = !revealSet || revealSet.has(record.index); const value = visible ? (snapshot.givens[record.index] || snapshot.values[record.index] || 0) : 0;
-      if (value) { ctx.fillStyle = snapshot.givens[record.index] ? snapshot.visual.given : snapshot.visual.entry; ctx.font = `${snapshot.visual.boardWeight} ${Math.max(18, Math.floor(cellSize * Math.min(.8, snapshot.visual.cellFontPct / 100)))}px ${snapshot.visual.boardFont}`; ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(value),x+cellSize/2,y+cellSize/2+cellSize*.015); }
-      else if (visible && !snapshot.givens[record.index] && !snapshot.values[record.index] && snapshot.notes[record.index]?.length) { const notes = new Set(snapshot.notes[record.index]); const inset = cellSize * .07; ctx.fillStyle = snapshot.visual.entry; ctx.font = `${snapshot.visual.boardWeight} ${Math.min(14, Math.max(3, cellSize * snapshot.visual.notesPct / 100))}px ${snapshot.visual.boardFont}`; ctx.textAlign='center';ctx.textBaseline='middle'; for(let n=1;n<=9;n++){if(notes.has(n)){const nr=Math.floor((n-1)/3),nc=(n-1)%3;ctx.fillText(String(n),x+inset+(cellSize-inset*2)*(nc+.5)/3,y+inset+(cellSize-inset*2)*(nr+.5)/3);}} }
-    }
-    ctx.lineCap='square';ctx.lineJoin='miter';ctx.strokeStyle=snapshot.visual.thin;ctx.lineWidth=thinWidth;
-    for(const record of layout.records){const x=originX+record.col*cellSize,y=originY+record.row*cellSize;if(recordByCoord.has(`${record.row},${record.col+1}`)){ctx.beginPath();ctx.moveTo(x+cellSize,y);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}if(recordByCoord.has(`${record.row+1},${record.col}`)){ctx.beginPath();ctx.moveTo(x,y+cellSize);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}}
-    const heavy = new Set(); for(const record of layout.records){const x=originX+record.col*cellSize,y=originY+record.row*cellSize;for(const owner of record.owners||[]){if(owner.lc===2||owner.lc===5)heavy.add(`v:${x+cellSize}:${y}:${y+cellSize}`);if(owner.lr===2||owner.lr===5)heavy.add(`h:${y+cellSize}:${x}:${x+cellSize}`);if(owner.lc===0&&!recordByCoord.has(`${record.row},${record.col-1}`))heavy.add(`v:${x}:${y}:${y+cellSize}`);if(owner.lc===8&&!recordByCoord.has(`${record.row},${record.col+1}`))heavy.add(`v:${x+cellSize}:${y}:${y+cellSize}`);if(owner.lr===0&&!recordByCoord.has(`${record.row-1},${record.col}`))heavy.add(`h:${y}:${x}:${x+cellSize}`);if(owner.lr===8&&!recordByCoord.has(`${record.row+1},${record.col}`))heavy.add(`h:${y+cellSize}:${x}:${x+cellSize}`);}}
-    ctx.strokeStyle=snapshot.visual.thick;ctx.lineWidth=thickWidth;for(const segment of heavy){const [kind,a,b,c]=segment.split(':').map(Number);ctx.beginPath();if(segment[0]==='v'){ctx.moveTo(a,b);ctx.lineTo(a,c);}else{ctx.moveTo(b,a);ctx.lineTo(c,a);}ctx.stroke();}if(snapshot.puzzle.mode!=='multi_grid'){ctx.strokeRect(originX,originY,boardWidth,boardHeight);}ctx.restore();
-  }
-
-  function videoDuration(sequence) { return VIDEO_INTRO_SECONDS + VIDEO_INTRO_PAUSE_SECONDS + sequence.length * VIDEO_VIEW_SECONDS; }
-  function renderVideoAtTime(ctx, snapshot, sequence, time, width, height) {
-    ctx.clearRect(0,0,width,height); drawVideoBackground(ctx,width,height); drawVideoHeader(ctx,snapshot,width); const safeTime=Math.max(0,Math.min(videoDuration(sequence)-1/VIDEO_EXPORT_FPS,time)); const layout=videoLayout(snapshot); const overview={kind:'all'};
-    if(safeTime<VIDEO_INTRO_SECONDS){const progress=safeTime/VIDEO_INTRO_SECONDS;const count=Math.min(snapshot.revealOrder.length,Math.floor((1-Math.pow(1-progress,2.4))*snapshot.revealOrder.length));drawVideoFrame(ctx,snapshot,overview,width,height,new Set(snapshot.revealOrder.slice(0,count)),videoCamera(snapshot,overview,layout,width,height));return;}
-    if(safeTime<VIDEO_INTRO_SECONDS+VIDEO_INTRO_PAUSE_SECONDS){drawVideoFrame(ctx,snapshot,overview,width,height,new Set(snapshot.revealOrder),videoCamera(snapshot,overview,layout,width,height));return;}
-    const sequenceTime=safeTime-VIDEO_INTRO_SECONDS-VIDEO_INTRO_PAUSE_SECONDS;const segment=Math.min(sequence.length-1,Math.floor(sequenceTime/VIDEO_VIEW_SECONDS));const local=sequenceTime-segment*VIDEO_VIEW_SECONDS;const current=sequence[segment];const next=sequence[segment+1];let camera=videoCamera(snapshot,current,layout,width,height);if(next&&local>VIDEO_VIEW_SECONDS-VIDEO_TRANSITION_SECONDS){camera=videoInterpolate(camera,videoCamera(snapshot,next,layout,width,height),videoEase((local-(VIDEO_VIEW_SECONDS-VIDEO_TRANSITION_SECONDS))/VIDEO_TRANSITION_SECONDS));}drawVideoFrame(ctx,snapshot,current,width,height,null,camera);
-  }
-
-  function videoDownload(blob, snapshot, ratio, extension) { const url=URL.createObjectURL(blob); const link=document.createElement('a');link.href=url;link.download=`lovdoku-${String(snapshot.code).replace(/[^A-Z0-9_-]/gi,'-')}-2k-${VIDEO_EXPORT_RATIOS[ratio].filePart}.${extension}`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),2000); }
-
-  async function createVideoWithMediaRecorder(snapshot, ratio, canvas) {
-    if (!canvas.captureStream || typeof MediaRecorder === 'undefined') throw new Error('This browser does not support browser-side video generation. Try a recent Chromium-based browser.');
-    const types=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4;codecs=avc1','video/mp4'];const mimeType=types.find(type=>MediaRecorder.isTypeSupported?.(type))||'';const stream=canvas.captureStream(0);const track=stream.getVideoTracks()[0];const recorder=mimeType?new MediaRecorder(stream,{mimeType,videoBitsPerSecond:16000000}):new MediaRecorder(stream,{videoBitsPerSecond:16000000});const chunks=[];const sequence=videoSequence(snapshot);const total=videoDuration(sequence);const totalFrames=Math.ceil(total*VIDEO_EXPORT_FPS);const ctx=canvas.getContext('2d',{alpha:false});recorder.ondataavailable=event=>{if(event.data?.size)chunks.push(event.data)};const stopped=new Promise(resolve=>{recorder.onstop=resolve});recorder.start(100);try{for(let frame=0;frame<totalFrames;frame+=1){renderVideoAtTime(ctx,snapshot,sequence,frame/VIDEO_EXPORT_FPS,canvas.width,canvas.height);track.requestFrame?.();setVideoExportStatus(`Rendering ${ratio} video · ${(Math.min(frame+1,totalFrames)/VIDEO_EXPORT_FPS).toFixed(1)}s / ${total.toFixed(1)}s…`);await new Promise(resolve=>setTimeout(resolve,1000/VIDEO_EXPORT_FPS));}await new Promise(resolve=>setTimeout(resolve,120));}catch(error){if(recorder.state!=='inactive')recorder.stop();throw error}if(recorder.state!=='inactive')recorder.stop();await stopped;stream.getTracks().forEach(videoTrack=>videoTrack.stop());const isMp4=mimeType.includes('mp4');const extension=isMp4?'mp4':'webm';videoDownload(new Blob(chunks,{type:mimeType||'video/webm'}),snapshot,ratio,extension);return {extension,isMp4};
-  }
-
-  async function createVideoExport() {
-    if (videoExporting) return; const snapshot=videoSnapshot(); if(!snapshot){setVideoExportStatus('Select a Sudoku puzzle first.','error');return;} const ratio=document.querySelector('input[name="videoRatio"]:checked')?.value||'16:9';const size=VIDEO_EXPORT_RATIOS[ratio]||VIDEO_EXPORT_RATIOS['16:9'];const canvas=document.createElement('canvas');canvas.width=size.width;canvas.height=size.height;setVideoExporting(true);setVideoExportStatus(`Preparing ${ratio} 2K video…`);
-    try{if(document.fonts?.ready)await document.fonts.ready;const result=await createVideoWithMediaRecorder(snapshot,ratio,canvas);setVideoExportStatus(`${result.isMp4?'MP4':'WebM'} downloaded successfully.`,'success');}catch(error){console.error('Lovdoku browser video export failed:',error);setVideoExportStatus(error?.message||'Video export failed.','error');}finally{setVideoExporting(false)}
-  }
-
   function setupEventListeners() {
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
@@ -1636,24 +1421,6 @@
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
     $('shareBtn')?.addEventListener('click', sharePuzzleLink);
-    $('videoExportBtn')?.addEventListener('click', () => {
-      if (videoExporting) return;
-      if (!state.puzzle) {
-        toast('Select a Sudoku puzzle first.');
-        return;
-      }
-      setVideoExportStatus('Choose a ratio, then click Create Video.');
-      setVideoExportDialogOpen(true);
-    });
-    document.querySelectorAll('input[name="videoRatio"]').forEach(input => input.addEventListener('change', () => {
-      videoExportRatio = input.value;
-      document.querySelectorAll('.video-ratio-option').forEach(option => option.classList.toggle('selected', option.querySelector('input')?.checked));
-    }));
-    $('videoExportCreateBtn')?.addEventListener('click', createVideoExport);
-    $('videoExportCloseBtn')?.addEventListener('click', () => { if (!videoExporting) setVideoExportDialogOpen(false); });
-    $('videoExportCancelBtn')?.addEventListener('click', () => { if (!videoExporting) setVideoExportDialogOpen(false); });
-    $('videoExportDialog')?.addEventListener('click', event => { if (event.target.id === 'videoExportDialog' && !videoExporting) setVideoExportDialogOpen(false); });
-    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !videoExporting && !$('videoExportDialog')?.hidden) setVideoExportDialogOpen(false); });
     $('appDialogConfirm')?.addEventListener('click', () => resolveAppDialog(true));
     $('appDialogCancel')?.addEventListener('click', () => resolveAppDialog(false));
     $('appDialogDismiss')?.addEventListener('click', () => resolveAppDialog(false));
@@ -1713,11 +1480,6 @@
       updateFontPreviewCell();
     });
 
-    $('fontSizeRange')?.addEventListener('input', (e) => {
-      fontSettings.sizePct = Number(e.target.value);
-      applyFontSettings();
-    });
-
     $('fontWeightSelect')?.addEventListener('change', (e) => {
       fontSettings.weight = e.target.value;
       updateFontPreviewCell();
@@ -1726,11 +1488,6 @@
     $('entryColorSelect')?.addEventListener('change', (e) => {
       fontSettings.entryColor = e.target.value;
       updateFontPreviewCell();
-    });
-
-    $('notesSizeRange')?.addEventListener('input', (e) => {
-      fontSettings.notesPct = Math.min(35, Math.max(10, Number(e.target.value) || defaultFontSettings.notesPct));
-      applyFontSettings();
     });
 
     $('saveFontSettingsBtn')?.addEventListener('click', () => {

@@ -121,7 +121,6 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
                 Fullscreen
               </button>
-              <button class="btn ghost video-export-btn" id="videoExportBtn" type="button" aria-label="Export 2K Video">Export 2K Video</button>
             </div>
           </div>
           <div class="stats">
@@ -324,22 +323,6 @@
 
     <div class="settings-group">
       <div class="settings-label">
-        <span>Font Size (% of Cell Height)</span>
-        <small id="fontSizeValDisplay">75%</small>
-      </div>
-      <input type="range" id="fontSizeRange" class="settings-range" min="40" max="90" step="1" value="75">
-    </div>
-
-    <div class="settings-group">
-      <div class="settings-label">
-        <span>Notes Size (% of Cell Size)</span>
-        <small id="notesSizeValDisplay">25%</small>
-      </div>
-      <input type="range" id="notesSizeRange" class="settings-range" min="10" max="35" step="1" value="25">
-    </div>
-
-    <div class="settings-group">
-      <div class="settings-label">
         <span>Font Weight</span>
       </div>
       <select id="fontWeightSelect" class="settings-select">
@@ -390,28 +373,6 @@
     <div class="modal-footer">
       <button class="btn ghost" id="resetFontSettingsBtn" type="button">Reset Defaults</button>
       <button class="btn primary" id="saveFontSettingsBtn" type="button">Done</button>
-    </div>
-  </div>
-</div>
-
-<div class="video-export-dialog" id="videoExportDialog" role="dialog" aria-modal="true" aria-hidden="true" hidden>
-  <div class="video-export-card" role="document">
-    <div class="video-export-header">
-      <div>
-        <p class="video-export-kicker">Browser export</p>
-        <h2>Choose video ratio</h2>
-      </div>
-      <button class="icon-btn video-export-close" id="videoExportCloseBtn" type="button" aria-label="Close video export dialog">×</button>
-    </div>
-    <div class="video-ratio-options" id="videoRatioOptions" role="radiogroup" aria-label="Video ratio">
-      <label class="video-ratio-option"><input type="radio" name="videoRatio" value="1:1"><span>1:1</span></label>
-      <label class="video-ratio-option"><input type="radio" name="videoRatio" value="9:16"><span>9:16</span></label>
-      <label class="video-ratio-option selected"><input type="radio" name="videoRatio" value="16:9" checked><span>16:9</span></label>
-    </div>
-    <p class="video-export-status" id="videoExportStatus" aria-live="polite"></p>
-    <div class="video-export-actions">
-      <button class="btn ghost" id="videoExportCancelBtn" type="button">Close</button>
-      <button class="btn primary" id="videoExportCreateBtn" type="button">Create Video</button>
     </div>
   </div>
 </div>

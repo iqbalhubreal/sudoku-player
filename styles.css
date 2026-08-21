@@ -465,6 +465,30 @@ button { border: 0; cursor: pointer; }
   border-radius: 8px;
 }
 
+.video-aspect-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.video-aspect-control select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .video-export-btn {
   padding: 6px 12px;
   font-size: 12px;

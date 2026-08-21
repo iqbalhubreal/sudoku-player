@@ -1,12 +1,19 @@
 (() => {
   'use strict';
 
-  const VIDEO_WIDTH = 2560;
-  const VIDEO_HEIGHT = 1440;
+  const ASPECT_RATIOS = {
+    '1:1': { width: 2560, height: 2560, filePart: '1x1' },
+    '9:16': { width: 1440, height: 2560, filePart: '9x16' },
+    '16:9': { width: 2560, height: 1440, filePart: '16x9' }
+  };
+  let VIDEO_WIDTH = ASPECT_RATIOS['16:9'].width;
+  let VIDEO_HEIGHT = ASPECT_RATIOS['16:9'].height;
+  let ACTIVE_ASPECT_RATIO = '16:9';
   const FPS = 24;
   const VIEW_SECONDS = 2;
   const TRANSITION_SECONDS = 0.32;
   const EXPORT_BUTTON_ID = 'videoExportBtn';
+  const ASPECT_RATIO_ID = 'videoAspectRatio';
   const STATUS_ID = 'videoExportStatus';
 
   const $ = id => document.getElementById(id);
@@ -67,15 +74,28 @@
     };
   }
 
+  function getSelectedAspectRatio() {
+    const value = $(ASPECT_RATIO_ID)?.value;
+    return ASPECT_RATIOS[value] ? value : '16:9';
+  }
+
+  function applyAspectRatio(aspectRatio) {
+    const size = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS['16:9'];
+    ACTIVE_ASPECT_RATIO = aspectRatio;
+    VIDEO_WIDTH = size.width;
+    VIDEO_HEIGHT = size.height;
+    return size;
+  }
+
   function buildSequence(snapshot) {
     const puzzle = snapshot.puzzle;
-    if (puzzle.mode !== 'multi_grid') return [{ kind: 'all', label: 'Full screen' }];
+    if (puzzle.mode !== 'multi_grid') return [{ kind: 'all' }];
 
-    const sequence = [{ kind: 'all', label: 'Full screen' }];
+    const sequence = [{ kind: 'all' }];
     puzzle.layout.forEach((grid, index) => {
-      sequence.push({ kind: 'focus', index, label: `Board ${index + 1}` });
+      sequence.push({ kind: 'focus', index });
     });
-    sequence.push({ kind: 'all', label: 'Full screen' });
+    sequence.push({ kind: 'all' });
     return sequence;
   }
 
@@ -121,36 +141,6 @@
     rightGlow.addColorStop(1, 'rgba(45,212,191,0)');
     ctx.fillStyle = rightGlow;
     ctx.fillRect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
-  }
-
-  function drawHeader(ctx, snapshot, label) {
-    const font = snapshot.visual.boardFont;
-    ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.font = `800 38px ${font}`;
-    ctx.fillText('LOVDOKU', 92, 92);
-    ctx.fillStyle = 'rgba(226,232,240,0.74)';
-    ctx.font = `600 24px ${font}`;
-    ctx.fillText(`#${snapshot.code}`, 94, 132);
-
-    const labelWidth = ctx.measureText(label).width;
-    ctx.fillStyle = 'rgba(15,23,42,0.56)';
-    ctx.beginPath();
-    ctx.roundRect(VIDEO_WIDTH - labelWidth - 150, 62, labelWidth + 72, 56, 28);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(224,231,255,0.94)';
-    ctx.font = `700 24px ${font}`;
-    ctx.fillText(label, VIDEO_WIDTH - labelWidth - 114, 98);
-    ctx.restore();
-  }
-
-  function drawFooter(ctx, snapshot) {
-    ctx.save();
-    ctx.fillStyle = 'rgba(226,232,240,0.6)';
-    ctx.font = `500 22px ${snapshot.visual.boardFont}`;
-    ctx.textAlign = 'center';
-    ctx.fillText('Constraint Sudoku', VIDEO_WIDTH / 2, VIDEO_HEIGHT - 64);
-    ctx.restore();
   }
 
   function roundedRectPath(ctx, x, y, width, height, radius) {
@@ -359,9 +349,7 @@
       camera = interpolateCamera(camera, getCamera(snapshot, next, layout), amount);
     }
 
-    drawHeader(ctx, snapshot, current.label);
     drawFrame(ctx, snapshot, current, 1, camera);
-    drawFooter(ctx, snapshot);
   }
 
   async function pickSupportedAvcConfig(width, height, bitrate) {
@@ -393,7 +381,8 @@
 
   function filename(snapshot, extension) {
     const code = String(snapshot.code || 'CUSTOM').replace(/[^A-Z0-9_-]/gi, '-');
-    return `lovdoku-${code}-2k.${extension}`;
+    const filePart = ASPECT_RATIOS[ACTIVE_ASPECT_RATIO]?.filePart || '16x9';
+    return `lovdoku-${code}-2k-${filePart}.${extension}`;
   }
 
   async function exportWithWebCodecs(snapshot, sequence, canvas) {
@@ -511,6 +500,7 @@
     }
 
     const sequence = buildSequence(snapshot);
+    applyAspectRatio(getSelectedAspectRatio());
     const canvas = document.createElement('canvas');
     canvas.width = VIDEO_WIDTH;
     canvas.height = VIDEO_HEIGHT;

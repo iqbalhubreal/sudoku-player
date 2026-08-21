@@ -1,10 +1,11 @@
-const CACHE_NAME = 'lovdoku-shell-v1';
+const CACHE_NAME = 'lovdoku-shell-v2';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './notice-carousel.js',
+  './video-export.js',
   './notice-config.json',
   './manifest.webmanifest',
   './icons/icon-192.png',

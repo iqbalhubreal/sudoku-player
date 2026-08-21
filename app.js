@@ -1368,6 +1368,11 @@
     });
   }
 
+  window.lovdokuApp = {
+    getState: () => state,
+    ownerColor
+  };
+
   async function openPuzzleFromUrl(){
     const code=normalizeCode(new URLSearchParams(window.location.search).get('puzzle'));
     if(!code)return false;

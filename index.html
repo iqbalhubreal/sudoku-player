@@ -17,6 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Comic+Neue:wght@400;700&family=Fira+Code:wght@500;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -121,6 +122,8 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
                 Fullscreen
               </button>
+              <button class="btn primary video-export-btn" id="videoExportBtn" type="button" aria-label="Export 2K Sudoku video">Export 2K Video</button>
+              <span class="video-export-status" id="videoExportStatus" role="status" aria-live="polite"></span>
             </div>
           </div>
           <div class="stats">
@@ -362,5 +365,6 @@
 
   <script src="notice-carousel.js" defer></script>
   <script src="app.js" defer></script>
+  <script src="video-export.js" defer></script>
 </body>
 </html>

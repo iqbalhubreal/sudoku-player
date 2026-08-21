@@ -465,6 +465,30 @@ button { border: 0; cursor: pointer; }
   border-radius: 8px;
 }
 
+.video-export-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.video-export-btn.exporting {
+  cursor: wait;
+  opacity: .72;
+}
+
+.video-export-status {
+  flex: 1 1 100%;
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.video-export-status[data-tone="success"] { color: var(--good); }
+.video-export-status[data-tone="warning"] { color: var(--gold); }
+.video-export-status[data-tone="error"] { color: var(--bad); }
+
 .current-share-btn:disabled { opacity: .7; cursor: wait; }
 
 .current-like-btn.liked {

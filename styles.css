@@ -479,6 +479,79 @@ button { border: 0; cursor: pointer; }
   white-space: nowrap;
 }
 
+.video-export-dialog {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+}
+
+.video-export-dialog[hidden] {
+  display: none;
+}
+
+.video-export-dialog-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 310px;
+  padding: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+}
+
+.video-export-dialog-card > div:first-child {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.video-export-dialog-card strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.video-export-dialog-card span:not(.sr-only) {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.video-dialog-export-btn {
+  padding: 7px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.video-dialog-close-btn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.video-dialog-close-btn:hover {
+  background: #f1f5f9;
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .video-export-dialog {
+    left: 0;
+    right: auto;
+  }
+
+  .video-export-dialog-card {
+    min-width: min(310px, calc(100vw - 48px));
+  }
+}
+
 .video-aspect-control select {
   border: 0;
   outline: 0;
@@ -499,6 +572,10 @@ button { border: 0; cursor: pointer; }
 .video-export-btn.exporting {
   cursor: wait;
   opacity: .72;
+}
+
+.play-actions-row {
+  position: relative;
 }
 
 .video-export-status {

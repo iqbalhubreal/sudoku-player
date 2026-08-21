@@ -2,16 +2,20 @@
 
 The browser-side exporter is implemented on branch `feature/browser-2k-video-export` in `iqbalhubreal/sudoku-player`.
 
-The exporter now provides 1:1, 9:16, and 16:9 choices. The generated frames contain only the cinematic background and Sudoku board; no Lovdoku title, puzzle number, board label, `Constraint Sudoku`, or full-screen text is drawn into the video.
+The exporter now keeps the ratio selector hidden on the board. Clicking `Export 2K Video` opens a compact dialog with `1:1`, `9:16`, and `16:9` choices plus `Create Video`; generation starts only after that confirmation.
 
-The multi-grid test used puzzle V2325 with four grids. All tested formats use H.264 MP4 at 24 fps and retain the 12-second sequence: full-board overview for 2 seconds, each board for 2 seconds with smooth camera movement, then the full-board overview again for 2 seconds.
+The generated video contains no Lovdoku title, puzzle number, `Constraint Sudoku`, `Full screen`, board labels, or other overlay text. It contains only the cinematic background and Sudoku board animation.
 
-| Aspect ratio | Dimensions | Duration | Test file |
-|---|---:|---:|---|
-| 1:1 | 2560×2560 | 12 seconds | `lovdoku-V2325-2k-1x1.mp4` |
-| 9:16 | 1440×2560 | 12 seconds | `lovdoku-V2325-2k-9x16.mp4` |
-| 16:9 | 2560×1440 | 12 seconds | `lovdoku-V2325-2k-16x9.mp4` |
+The revised timeline begins with an empty grid. Over the first 2 seconds, the puzzle’s givens and current entries appear rapidly in a deterministic pseudo-random order. The fully populated overview then holds for 1 second. The multi-grid camera sequence follows: full overview for 2 seconds, each grid for 2 seconds with smooth camera movement, and the full overview again for 2 seconds.
 
-A single-grid puzzle continues to produce a static 2-second video in the selected aspect ratio.
+For the tested V2325 four-grid puzzle, the resulting duration is 15 seconds: 2 seconds reveal + 1 second pause + 12 seconds of grid views.
+
+| Aspect ratio | Dimensions | Codec | Duration |
+|---|---:|---|---:|
+| 1:1 | 2560×2560 | H.264 MP4 | 15 seconds |
+| 9:16 | 1440×2560 | H.264 MP4 | 15 seconds |
+| 16:9 | 2560×1440 | H.264 MP4 | 15 seconds |
+
+A single-grid puzzle uses the same 2-second reveal and 1-second pause, followed by its 2-second static overview, for a 5-second export.
 
 The output is generated entirely in the browser with a canvas, WebCodecs `VideoEncoder`, and `mp4-muxer`. The fallback uses `MediaRecorder`; browsers that expose only WebM will download WebM instead of MP4. No production deployment was performed.

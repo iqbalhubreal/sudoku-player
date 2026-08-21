@@ -11,8 +11,13 @@
   let ACTIVE_ASPECT_RATIO = '16:9';
   const FPS = 24;
   const VIEW_SECONDS = 2;
+  const INTRO_SECONDS = 2;
+  const INTRO_PAUSE_SECONDS = 1;
   const TRANSITION_SECONDS = 0.32;
   const EXPORT_BUTTON_ID = 'videoExportBtn';
+  const DIALOG_ID = 'videoExportDialog';
+  const DIALOG_EXPORT_BUTTON_ID = 'videoDialogExportBtn';
+  const DIALOG_CLOSE_ID = 'videoDialogCloseBtn';
   const ASPECT_RATIO_ID = 'videoAspectRatio';
   const STATUS_ID = 'videoExportStatus';
 
@@ -33,13 +38,25 @@
     element.dataset.tone = tone;
   }
 
+  function setExportDialogOpen(open) {
+    const dialog = $(DIALOG_ID);
+    if (!dialog) return;
+    dialog.hidden = !open;
+  }
+
   function setExporting(exporting) {
     const button = $(EXPORT_BUTTON_ID);
-    if (!button) return;
-    button.disabled = exporting;
-    button.setAttribute('aria-busy', exporting ? 'true' : 'false');
-    button.classList.toggle('exporting', exporting);
-    button.textContent = exporting ? 'Generating 2K Video…' : 'Export 2K Video';
+    const dialogButton = $(DIALOG_EXPORT_BUTTON_ID);
+    if (button) {
+      button.disabled = exporting;
+      button.setAttribute('aria-busy', exporting ? 'true' : 'false');
+      button.classList.toggle('exporting', exporting);
+      button.textContent = exporting ? 'Generating 2K Video…' : 'Export 2K Video';
+    }
+    if (dialogButton) {
+      dialogButton.disabled = exporting;
+      dialogButton.textContent = exporting ? 'Generating…' : 'Create Video';
+    }
   }
 
   function getAppState() {
@@ -65,13 +82,15 @@
   function snapshotState() {
     const state = getAppState();
     if (!state?.puzzle) return null;
-    return {
+    const snapshot = {
       puzzle: state.puzzle,
       givens: [...state.givens],
       values: [...state.values],
       code: state.currentPuzzleCode || 'CUSTOM',
       visual: getVisualStyle()
     };
+    snapshot.revealOrder = makeRevealOrder(snapshot);
+    return snapshot;
   }
 
   function getSelectedAspectRatio() {
@@ -99,8 +118,25 @@
     return sequence;
   }
 
+  function makeRevealOrder(snapshot) {
+    const indices = snapshot.givens
+      .map((value, index) => value || snapshot.values[index] ? index : -1)
+      .filter(index => index >= 0);
+    let seed = Array.from(String(snapshot.code || 'CUSTOM'))
+      .reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 17);
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    for (let index = indices.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(random() * (index + 1));
+      [indices[index], indices[swapIndex]] = [indices[swapIndex], indices[index]];
+    }
+    return indices;
+  }
+
   function getTotalDuration(sequence) {
-    return sequence.length * VIEW_SECONDS;
+    return INTRO_SECONDS + INTRO_PAUSE_SECONDS + sequence.length * VIEW_SECONDS;
   }
 
   function getPuzzleBounds(puzzle) {
@@ -170,7 +206,8 @@
     return '';
   }
 
-  function valueAt(snapshot, index) {
+  function valueAt(snapshot, index, revealProgress = null) {
+    if (revealProgress && !revealProgress.has(index)) return 0;
     return snapshot.givens[index] || snapshot.values[index] || 0;
   }
 
@@ -224,7 +261,7 @@
     };
   }
 
-  function drawBoard(ctx, snapshot, view, alpha = 1, cameraOverride = null) {
+  function drawBoard(ctx, snapshot, view, alpha = 1, cameraOverride = null, revealProgress = null) {
     const layout = makeCellRecords(snapshot);
     if (!layout.records.length) return;
     const camera = cameraOverride || getCamera(snapshot, view, layout);
@@ -258,7 +295,7 @@
       ctx.fillStyle = color || '#ffffff';
       ctx.fillRect(x, y, cellSize, cellSize);
 
-      const value = valueAt(snapshot, record.index);
+      const value = valueAt(snapshot, record.index, revealProgress);
       if (value) {
         const isGiven = Boolean(snapshot.givens[record.index]);
         ctx.fillStyle = isGiven ? given : entry;
@@ -330,19 +367,40 @@
     ctx.restore();
   }
 
-  function drawFrame(ctx, snapshot, view, alpha = 1, cameraOverride = null) {
-    drawBoard(ctx, snapshot, view, alpha, cameraOverride);
+  function drawFrame(ctx, snapshot, view, alpha = 1, cameraOverride = null, revealProgress = null) {
+    drawBoard(ctx, snapshot, view, alpha, cameraOverride, revealProgress);
   }
 
   function renderAtTime(ctx, canvas, snapshot, sequence, timeSeconds) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCinematicBackground(ctx);
-    const safeTime = Math.max(0, Math.min(getTotalDuration(sequence) - 1 / FPS, timeSeconds));
-    const segment = Math.min(sequence.length - 1, Math.floor(safeTime / VIEW_SECONDS));
-    const local = safeTime - segment * VIEW_SECONDS;
+    const totalDuration = getTotalDuration(sequence);
+    const safeTime = Math.max(0, Math.min(totalDuration - 1 / FPS, timeSeconds));
+    const layout = makeCellRecords(snapshot);
+    const overview = { kind: 'all' };
+
+    if (safeTime < INTRO_SECONDS) {
+      const revealProgress = safeTime / INTRO_SECONDS;
+      const revealCount = Math.min(
+        snapshot.revealOrder.length,
+        Math.floor((1 - Math.pow(1 - revealProgress, 2.4)) * snapshot.revealOrder.length)
+      );
+      const revealed = new Set(snapshot.revealOrder.slice(0, revealCount));
+      drawFrame(ctx, snapshot, overview, 1, getCamera(snapshot, overview, layout), revealed);
+      return;
+    }
+
+    if (safeTime < INTRO_SECONDS + INTRO_PAUSE_SECONDS) {
+      const revealed = new Set(snapshot.revealOrder);
+      drawFrame(ctx, snapshot, overview, 1, getCamera(snapshot, overview, layout), revealed);
+      return;
+    }
+
+    const sequenceTime = safeTime - INTRO_SECONDS - INTRO_PAUSE_SECONDS;
+    const segment = Math.min(sequence.length - 1, Math.floor(sequenceTime / VIEW_SECONDS));
+    const local = sequenceTime - segment * VIEW_SECONDS;
     const current = sequence[segment];
     const next = sequence[segment + 1];
-    const layout = makeCellRecords(snapshot);
     let camera = getCamera(snapshot, current, layout);
     if (next && local > VIEW_SECONDS - TRANSITION_SECONDS) {
       const amount = easeInOut((local - (VIEW_SECONDS - TRANSITION_SECONDS)) / TRANSITION_SECONDS);
@@ -526,7 +584,21 @@
   }
 
   function setup() {
-    $(EXPORT_BUTTON_ID)?.addEventListener('click', exportVideo);
+    $(EXPORT_BUTTON_ID)?.addEventListener('click', () => {
+      if (!snapshotState()) {
+        setStatus('Select a Sudoku puzzle first.', 'error');
+        return;
+      }
+      setExportDialogOpen(true);
+    });
+    $(DIALOG_EXPORT_BUTTON_ID)?.addEventListener('click', () => {
+      setExportDialogOpen(false);
+      exportVideo();
+    });
+    $(DIALOG_CLOSE_ID)?.addEventListener('click', () => setExportDialogOpen(false));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') setExportDialogOpen(false);
+    });
   }
 
   if (document.readyState === 'loading') {

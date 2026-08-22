@@ -715,6 +715,9 @@
   function showLikeStorageInfo(){
     showAppDialog({kicker:'Saved progress',title:'How local progress is kept',message:'Liked puzzles keep their progress on this browser. Progress for puzzles you have not liked is automatically removed after 12 hours without an update. You can like up to 25 puzzles.',confirmLabel:'Got it',showCancel:false});
   }
+  function showProgressDataInfo(){
+    showAppDialog({kicker:'Progress Data',title:'Import and export progress',message:'Export Progress downloads a JSON backup of your saved progress. Import Progress restores and merges a compatible Lovdoku JSON backup into this browser. Nothing is uploaded to the server.',confirmLabel:'Got it',showCancel:false});
+  }
 
   function sharedPuzzleCodeFromUrl(){
     const params=new URLSearchParams(window.location.search);
@@ -1450,6 +1453,7 @@
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
     $('likeInfoBtn')?.addEventListener('click', showLikeStorageInfo);
+    $('progressInfoBtn')?.addEventListener('click', showProgressDataInfo);
     $('shareBtn')?.addEventListener('click', sharePuzzleLink);
     $('appDialogConfirm')?.addEventListener('click', () => resolveAppDialog(true));
     $('appDialogCancel')?.addEventListener('click', () => resolveAppDialog(false));

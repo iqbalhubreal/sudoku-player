@@ -469,21 +469,40 @@ button { border: 0; cursor: pointer; }
 
 .like-info-btn,
 .progress-info-btn {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 19px;
+  height: 19px;
+  min-width: 19px;
+  flex: 0 0 19px;
   padding: 0;
+  border: 1px solid #94a3b8;
   border-radius: 50%;
-  font-family: Georgia, serif;
-  font-size: 13px;
+  background: #ffffff;
+  color: #475569;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 17px;
+  text-align: center;
   box-shadow: none;
 }
 
 .like-info-btn:hover,
 .progress-info-btn:hover {
+  background: #f8fafc;
+  color: var(--brand);
+  border-color: var(--brand);
   transform: none;
+}
+
+.progress-export-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-export-row .drawer-btn {
+  width: auto;
+  flex: 1 1 auto;
 }
 
 .current-like-btn.liked {
@@ -1087,6 +1106,33 @@ button { border: 0; cursor: pointer; }
   transform: translateY(-1px);
 }
 
+.play-actions-row .like-info-btn,
+.progress-export-row .progress-info-btn {
+  width: 19px;
+  height: 19px;
+  min-width: 19px;
+  flex: 0 0 19px;
+  padding: 0;
+  border: 1px solid #94a3b8;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #475569;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: none;
+}
+
+.play-actions-row .like-info-btn:hover,
+.progress-export-row .progress-info-btn:hover {
+  background: #f8fafc;
+  color: var(--brand);
+  border-color: var(--brand);
+  transform: none;
+}
+
 .drawer-overlay {
   position: fixed;
   inset: 0;
@@ -1165,6 +1211,7 @@ button { border: 0; cursor: pointer; }
 .drawer-desc { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 .drawer-actions { display: flex; flex-direction: column; gap: 10px; }
 .drawer-btn { width: 100%; justify-content: center; padding: 11px 16px; }
+.progress-export-row .progress-info-btn { margin: 0; }
 
 .modal-overlay {
   position: fixed;

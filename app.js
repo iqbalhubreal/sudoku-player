@@ -1310,8 +1310,7 @@
     $('gameState').classList.remove('hidden');
     $('puzzleTitle').textContent = parsed.label || 'Sudoku Puzzle';
     const difficultyLevel = typeof parsed.difficulty==='string' ? parsed.difficulty : (parsed.difficulty?.level || parsed.difficulty?.name || 'Unrated');
-    const involvement = (parsed.constraintSummary||[]).join(' · ') || parsed.label || 'Classic Sudoku';
-    $('puzzleSubtitle').textContent = `${difficultyLevel} · ${involvement}`;
+    $('puzzleSubtitle').textContent = difficultyLevel;
     $('boardPuzzleNumber').textContent = `#${state.currentPuzzleCode}`;
 
     updateCurrentLikeButton();

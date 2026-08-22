@@ -1097,7 +1097,7 @@ button { border: 0; cursor: pointer; }
   cursor: help;
 }
 
-.embedded-info img {
+.embedded-info-svg {
   display: block;
   width: 14px;
   height: 14px;

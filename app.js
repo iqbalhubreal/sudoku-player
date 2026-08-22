@@ -392,14 +392,17 @@
     const button=$('currentLikeBtn');
     const code=state.currentPuzzleCode;
     if(!button) return;
+    const info=button.querySelector('#likeInfoBtn');
     if (!code) {
       button.classList.remove('liked');
-      button.textContent = '♡ Like';
+      button.textContent = '♡ Like ';
+      if(info) button.appendChild(info);
       return;
     }
     const liked=isLiked(code);
     button.classList.toggle('liked',liked);
-    button.textContent=liked?'♥ Liked':'♡ Like';
+    button.textContent=liked?'♥ Liked ':'♡ Like ';
+    if(info) button.appendChild(info);
     button.title=liked?'Remove from liked puzzles':'Add to liked puzzles';
     button.setAttribute('aria-label',button.title);
   }

@@ -1452,8 +1452,15 @@
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
-    $('likeInfoBtn')?.addEventListener('click', showLikeStorageInfo);
-    $('progressInfoBtn')?.addEventListener('click', showProgressDataInfo);
+    const bindEmbeddedInfo = (id, handler) => {
+      const control = $(id);
+      if (!control) return;
+      const activate = (event) => { event.preventDefault(); event.stopPropagation(); handler(); };
+      control.addEventListener('click', activate);
+      control.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') activate(event); });
+    };
+    bindEmbeddedInfo('likeInfoBtn', showLikeStorageInfo);
+    bindEmbeddedInfo('progressInfoBtn', showProgressDataInfo);
     $('shareBtn')?.addEventListener('click', sharePuzzleLink);
     $('appDialogConfirm')?.addEventListener('click', () => resolveAppDialog(true));
     $('appDialogCancel')?.addEventListener('click', () => resolveAppDialog(false));

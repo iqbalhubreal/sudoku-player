@@ -467,33 +467,6 @@ button { border: 0; cursor: pointer; }
   border-radius: 8px;
 }
 
-.like-info-btn,
-.progress-info-btn {
-  width: 19px;
-  height: 19px;
-  min-width: 19px;
-  flex: 0 0 19px;
-  padding: 0;
-  border: 1px solid #94a3b8;
-  border-radius: 50%;
-  background: #ffffff;
-  color: #475569;
-  font-family: Arial, sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 17px;
-  text-align: center;
-  box-shadow: none;
-}
-
-.like-info-btn:hover,
-.progress-info-btn:hover {
-  background: #f8fafc;
-  color: var(--brand);
-  border-color: var(--brand);
-  transform: none;
-}
-
 .progress-export-row {
   display: flex;
   align-items: center;
@@ -1106,31 +1079,33 @@ button { border: 0; cursor: pointer; }
   transform: translateY(-1px);
 }
 
-.play-actions-row .like-info-btn,
-.progress-export-row .progress-info-btn {
-  width: 19px;
-  height: 19px;
-  min-width: 19px;
-  flex: 0 0 19px;
-  padding: 0;
-  border: 1px solid #94a3b8;
+.play-actions-row .embedded-info,
+.progress-export-row .embedded-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  flex: 0 0 17px;
+  margin-left: 6px;
+  border: 1px solid currentColor;
   border-radius: 50%;
-  background: #ffffff;
-  color: #475569;
+  background: transparent;
+  color: currentColor;
   font-family: Arial, sans-serif;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  line-height: 17px;
+  line-height: 15px;
   text-align: center;
-  box-shadow: none;
+  vertical-align: middle;
+  cursor: help;
 }
 
-.play-actions-row .like-info-btn:hover,
-.progress-export-row .progress-info-btn:hover {
-  background: #f8fafc;
+.play-actions-row .embedded-info:hover,
+.progress-export-row .embedded-info:hover {
+  background: rgba(255, 255, 255, 0.65);
   color: var(--brand);
-  border-color: var(--brand);
-  transform: none;
 }
 
 .drawer-overlay {
@@ -1211,7 +1186,7 @@ button { border: 0; cursor: pointer; }
 .drawer-desc { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 .drawer-actions { display: flex; flex-direction: column; gap: 10px; }
 .drawer-btn { width: 100%; justify-content: center; padding: 11px 16px; }
-.progress-export-row .progress-info-btn { margin: 0; }
+.progress-export-row .embedded-info { margin-left: 6px; }
 
 .modal-overlay {
   position: fixed;

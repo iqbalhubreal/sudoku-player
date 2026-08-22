@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="google" content="notranslate">
-<title>Sudoku Player</title>
+<title>Lovdoku — Constraint Sudoku</title>
 <meta name="description" content="Choose, play, and save Constraint Sudoku puzzles.">
 <meta name="theme-color" content="#4f46e5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Sudoku Player">
+<meta name="apple-mobile-web-app-title" content="Lovdoku">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -47,7 +47,7 @@
     <div class="section-title">
       <h2>Sudoku Library</h2>
     </div>
-    <p class="config-note" id="apiConfigNote">The latest five puzzles and liked puzzles are saved with their JSON for offline play.</p>
+    <p class="config-note" id="apiConfigNote">A batch of puzzles is downloaded once for fast local play; Open and Load More reveal puzzles already stored in this browser.</p>
     <div class="library-toolbar">
       <div class="library-search-row">
         <input id="librarySearch" maxlength="5" inputmode="text" autocomplete="off" placeholder="Puzzle number (e.g., A1234)" aria-label="Puzzle number">
@@ -116,7 +116,8 @@
             <div class="play-actions-row">
               <span class="puzzle-code-badge" id="boardPuzzleNumber">#—</span>
               <button class="btn ghost current-like-btn" id="currentLikeBtn" type="button" aria-label="Like this puzzle">♡ Like</button>
-              <button class="btn ghost current-share-btn" id="shareBtn" type="button" aria-label="Share this puzzle link">⇧ Share</button>
+              <button class="icon-btn like-info-btn" id="likeInfoBtn" type="button" aria-label="How liked-puzzle storage works" title="How liked-puzzle storage works">i</button>
+              <button class="btn ghost current-share-btn" id="shareBtn" type="button" aria-label="Share puzzle link">↗ Share</button>
               <button class="btn ghost" id="fullscreenBtn" type="button" aria-label="Enter Fullscreen Mode">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
                 Fullscreen
@@ -254,10 +255,13 @@
       <h4>Progress Data</h4>
       <p class="drawer-desc">Export your current puzzle progress to a file or restore previously saved data.</p>
       <div class="drawer-actions">
-        <button class="btn secondary drawer-btn" id="exportProgressBtn" type="button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Export Progress
-        </button>
+        <div class="progress-export-row">
+          <button class="btn secondary drawer-btn" id="exportProgressBtn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Progress
+          </button>
+          <button class="icon-btn progress-info-btn" id="progressInfoBtn" type="button" aria-label="How progress import and export work" title="How progress import and export work">i</button>
+        </div>
         <label class="btn ghost drawer-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Import Progress
@@ -323,14 +327,6 @@
 
     <div class="settings-group">
       <div class="settings-label">
-        <span>Font Size (% of Cell Height)</span>
-        <small id="fontSizeValDisplay">65%</small>
-      </div>
-      <input type="range" id="fontSizeRange" class="settings-range" min="40" max="90" step="1" value="65">
-    </div>
-
-    <div class="settings-group">
-      <div class="settings-label">
         <span>Font Weight</span>
       </div>
       <select id="fontWeightSelect" class="settings-select">
@@ -343,9 +339,37 @@
       </select>
     </div>
 
+    <div class="settings-group">
+      <div class="settings-label">
+        <span>User Entry Color</span>
+      </div>
+      <select id="entryColorSelect" class="settings-select">
+        <option value="#1d4ed8">Deep Blue (Default)</option>
+        <option value="#1e3a8a">Midnight Navy</option>
+        <option value="#3730a3">Deep Indigo</option>
+        <option value="#6d28d9">Deep Violet</option>
+        <option value="#0f766e">Deep Teal</option>
+      </select>
+    </div>
+
     <div class="font-preview-box">
-      <div class="settings-label" style="justify-content:center; margin-bottom:10px;">Preview Cell</div>
-      <div class="font-preview-cell" id="fontPreviewCell">7</div>
+      <div class="settings-label" style="justify-content:center; margin-bottom:10px;">Appearance Preview</div>
+      <div class="font-preview-grid">
+        <div class="font-preview-item">
+          <div class="font-preview-label">Cell Value</div>
+          <div class="font-preview-cell" id="fontPreviewCell">7</div>
+        </div>
+        <div class="font-preview-item">
+          <div class="font-preview-label">Notes</div>
+          <div class="font-preview-cell font-preview-notes" id="fontPreviewNotes" aria-label="Notes preview">
+            <div class="font-preview-notes-grid" aria-hidden="true">
+              <span>1</span><span></span><span></span>
+              <span></span><span>5</span><span></span>
+              <span></span><span></span><span>9</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     </div>
@@ -353,6 +377,19 @@
     <div class="modal-footer">
       <button class="btn ghost" id="resetFontSettingsBtn" type="button">Reset Defaults</button>
       <button class="btn primary" id="saveFontSettingsBtn" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="app-dialog" id="appDialog" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="app-dialog-card" role="document">
+    <div class="app-dialog-icon" aria-hidden="true">?</div>
+    <p class="app-dialog-kicker" id="appDialogKicker">Lovdoku</p>
+    <h2 id="appDialogTitle">Please confirm</h2>
+    <p class="app-dialog-message" id="appDialogMessage"></p>
+    <div class="app-dialog-actions">
+      <button class="btn ghost hidden" id="appDialogCancel" type="button">Cancel</button>
+      <button class="btn primary" id="appDialogConfirm" type="button">Continue</button>
     </div>
   </div>
 </div>

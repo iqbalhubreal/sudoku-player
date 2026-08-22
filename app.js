@@ -83,94 +83,24 @@
     recentPuzzles: 'lovdoku.recent-puzzles.v1',
     likedPuzzles: 'lovdoku.liked-puzzles.v1',
     puzzleCache: 'lovdoku.puzzle-cache.v1',
-    fontSettings: 'lovdoku.font-settings.v1'
+    librarySnapshot: 'lovdoku.library-snapshot.v1',
+    fontSettings: 'lovdoku.font-settings.v1',
+    solutionWarnings: 'lovdoku.solution-warnings.v1',
+    storageMaintenance: 'lovdoku.storage-maintenance.v1'
   };
-  const STORAGE_DB_NAME = 'lovdoku-storage';
-  const STORAGE_DB_VERSION = 1;
-  const STORAGE_OBJECT_STORE = 'keyValue';
-  const storageMemory = Object.create(null);
-  let storageDb = null;
-  let storageFallbackToLocalStorage = false;
-  let storageWriteChain = Promise.resolve();
-
-  function readLegacyStorageValue(key) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw === null ? undefined : JSON.parse(raw);
-    } catch (_) {
-      return undefined;
-    }
-  }
-
-  Object.values(STORAGE_KEYS).forEach(key => {
-    const value = readLegacyStorageValue(key);
-    if (value !== undefined) storageMemory[key] = value;
-  });
-
-  function openStorageDatabase() {
-    return new Promise((resolve, reject) => {
-      if (!('indexedDB' in window)) {
-        reject(new Error('IndexedDB is unavailable.'));
-        return;
-      }
-      const request = indexedDB.open(STORAGE_DB_NAME, STORAGE_DB_VERSION);
-      request.onupgradeneeded = () => {
-        if (!request.result.objectStoreNames.contains(STORAGE_OBJECT_STORE)) {
-          request.result.createObjectStore(STORAGE_OBJECT_STORE);
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error('IndexedDB could not be opened.'));
-    });
-  }
-
-  function readIndexedDbValue(db, key) {
-    return new Promise((resolve, reject) => {
-      const request = db.transaction(STORAGE_OBJECT_STORE, 'readonly').objectStore(STORAGE_OBJECT_STORE).get(key);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error('IndexedDB read failed.'));
-    });
-  }
-
-  function writeIndexedDbValue(db, key, value) {
-    return new Promise((resolve, reject) => {
-      const request = db.transaction(STORAGE_OBJECT_STORE, 'readwrite').objectStore(STORAGE_OBJECT_STORE).put(value, key);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error || new Error('IndexedDB write failed.'));
-    });
-  }
-
-  async function initializeStorage() {
-    try {
-      const db = await openStorageDatabase();
-      const legacyValues = Object.values(STORAGE_KEYS).map(key => [key, readLegacyStorageValue(key)]);
-      const storedValues = await Promise.all(Object.values(STORAGE_KEYS).map(key => readIndexedDbValue(db, key)));
-      Object.values(STORAGE_KEYS).forEach((key, index) => {
-        if (storedValues[index] !== undefined) storageMemory[key] = storedValues[index];
-      });
-      storageDb = db;
-      await Promise.all(legacyValues.map(async ([key, value]) => {
-        if (storedValues[Object.values(STORAGE_KEYS).indexOf(key)] === undefined && value !== undefined) {
-          await writeIndexedDbValue(db, key, value);
-          storageMemory[key] = value;
-        }
-      }));
-      legacyValues.forEach(([key]) => {
-        try { localStorage.removeItem(key); } catch (_) {}
-      });
-      return true;
-    } catch (error) {
-      storageFallbackToLocalStorage = true;
-      console.warn('IndexedDB unavailable; using localStorage fallback.', error);
-      return false;
-    }
-  }
-
-  const storageReady = initializeStorage();
-
   const RECENT_CACHE_LIMIT = 5;
+  const LIBRARY_BATCH_LIMIT = 50;
+  const LIBRARY_PAGE_SIZE = 5;
+  const LIBRARY_CACHE_TTL_MS = 15 * 60 * 1000;
+  const PUZZLE_CACHE_LIMIT = 50;
+  const PROGRESS_WRITE_INTERVAL_MS = 15 * 1000;
+  const PROGRESS_RETENTION_MS = 12 * 60 * 60 * 1000;
+  const PROGRESS_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+  const MAX_LIKED_PUZZLES = 25;
+  let progressCleanupTimer = null;
   let libraryItems = [];
   let libraryOffset = 0;
+  let libraryVisibleCount = LIBRARY_PAGE_SIZE;
   let libraryHasMore = false;
   let libraryLoading = false;
   let showingLiked = false;
@@ -178,23 +108,26 @@
 
   const defaultFontSettings = {
     family: "'Plus Jakarta Sans', sans-serif",
-    sizePct: 65,
-    weight: '700'
+    sizePct: 70,
+    weight: '700',
+    entryColor: '#1d4ed8',
+    notesPct: 20
   };
   let fontSettings = {...defaultFontSettings};
 
   function loadFontSettings() {
     const saved = readStorage(STORAGE_KEYS.fontSettings, null);
+    fontSettings = {...defaultFontSettings};
     if (saved && typeof saved === 'object') {
       fontSettings.family = saved.family || defaultFontSettings.family;
-      fontSettings.sizePct = Math.min(90, Math.max(40, Number(saved.sizePct) || 65));
-      fontSettings.weight = String(saved.weight || '700');
+      fontSettings.weight = String(saved.weight || defaultFontSettings.weight);
+      fontSettings.entryColor = /^#[0-9a-f]{6}$/i.test(saved.entryColor || '') ? saved.entryColor : defaultFontSettings.entryColor;
     }
     applyFontSettings();
   }
 
   function saveFontSettings() {
-    writeStorage(STORAGE_KEYS.fontSettings, fontSettings);
+    writeStorage(STORAGE_KEYS.fontSettings, {...fontSettings, sizeDefaultVersion: 2});
     applyFontSettings();
   }
 
@@ -202,11 +135,12 @@
     document.documentElement.style.setProperty('--board-font-family', fontSettings.family);
     document.documentElement.style.setProperty('--board-font-weight', fontSettings.weight);
     document.documentElement.style.setProperty('--cell-font-pct', fontSettings.sizePct);
+    document.documentElement.style.setProperty('--entry', fontSettings.entryColor);
+    document.documentElement.style.setProperty('--notes-font-scale', String(fontSettings.notesPct / 100));
     
     if ($('fontFamilySelect')) $('fontFamilySelect').value = fontSettings.family;
-    if ($('fontSizeRange')) $('fontSizeRange').value = fontSettings.sizePct;
-    if ($('fontSizeValDisplay')) $('fontSizeValDisplay').textContent = `${fontSettings.sizePct}%`;
     if ($('fontWeightSelect')) $('fontWeightSelect').value = fontSettings.weight;
+    if ($('entryColorSelect')) $('entryColorSelect').value = fontSettings.entryColor;
 
     updateCellFontSizePx();
     updateFontPreviewCell();
@@ -224,18 +158,30 @@
     }
     
     if (cellHeight > 0) {
-      const computedPx = cellHeight * (fontSettings.sizePct / 100);
+      const cellWidth = firstCell?.getBoundingClientRect().width || cellHeight;
+      document.documentElement.style.setProperty('--cell-size-px', `${cellHeight}px`);
+      const requestedPx = cellHeight * (fontSettings.sizePct / 100);
+      const computedPx = Math.max(8, Math.min(requestedPx, cellHeight * 0.8, cellWidth * 0.82));
       document.documentElement.style.setProperty('--cell-font-size-px', `${computedPx}px`);
     }
   }
 
   function updateFontPreviewCell() {
     const cell = $('fontPreviewCell');
-    if (!cell) return;
-    cell.style.fontFamily = fontSettings.family;
-    cell.style.fontWeight = fontSettings.weight;
-    const px = 64 * (fontSettings.sizePct / 100);
-    cell.style.fontSize = `${px}px`;
+    const notes = $('fontPreviewNotes');
+    if (cell) {
+      cell.style.fontFamily = fontSettings.family;
+      cell.style.fontWeight = fontSettings.weight;
+      cell.style.color = fontSettings.entryColor;
+      const px = 64 * (fontSettings.sizePct / 100);
+      cell.style.fontSize = `${px}px`;
+    }
+    if (notes) {
+      notes.style.fontFamily = fontSettings.family;
+      notes.style.fontWeight = fontSettings.weight;
+      notes.style.color = fontSettings.entryColor;
+      notes.style.setProperty('--preview-notes-size', `${64 * (fontSettings.notesPct / 100)}px`);
+    }
   }
 
   function resetBoardAppearance() {
@@ -249,42 +195,190 @@
     const settings = puzzle?.settings || {};
     if (colors.gridLine) document.documentElement.style.setProperty('--thick-line-color', colors.gridLine);
     if (colors.puzzleNumbers) document.documentElement.style.setProperty('--given', colors.puzzleNumbers);
-    if (colors.solutionNumbers) document.documentElement.style.setProperty('--entry', colors.solutionNumbers);
     if (settings.lineColor) document.documentElement.style.setProperty('--thick-line-color', settings.lineColor);
     document.documentElement.style.setProperty('--thin-line-color', '#cbd5e1');
     if (settings.puzzleNumberColor) document.documentElement.style.setProperty('--given', settings.puzzleNumberColor);
-    if (settings.solutionNumberColor) document.documentElement.style.setProperty('--entry', settings.solutionNumberColor);
     if (Number.isFinite(Number(settings.thinLineWidth))) document.documentElement.style.setProperty('--thin-line-width', `${Number(settings.thinLineWidth)}px`);
     if (Number.isFinite(Number(settings.thickLineWidth))) document.documentElement.style.setProperty('--thick-line-width', `${Number(settings.thickLineWidth)}px`);
     if (settings.thickLineColor) document.documentElement.style.setProperty('--thick-line-color', settings.thickLineColor);
   }
 
+  const IDB_NAME='lovdoku';
+  const IDB_VERSION=3;
+  const IDB_STORE='kv';
+  const IDB_PUZZLE_STORE='puzzles';
+  let idbDatabase=null;
+  let storageBackend='localStorage';
+  const storageMemory=Object.create(null);
+  const storageSerialized=Object.create(null);
+
+  function localStorageRead(key){try{const raw=localStorage.getItem(key);return raw===null?undefined:JSON.parse(raw)}catch(_){return undefined}}
+  function localStorageWrite(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(_){return false}}
+  function openStorageDatabase(){
+    return new Promise((resolve,reject)=>{
+      if(typeof indexedDB==='undefined'){reject(new Error('IndexedDB is unavailable.'));return}
+      const request=indexedDB.open(IDB_NAME,IDB_VERSION);
+      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'key'});if(!db.objectStoreNames.contains(IDB_PUZZLE_STORE))db.createObjectStore(IDB_PUZZLE_STORE,{keyPath:'code'})};
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error||new Error('IndexedDB could not be opened.'));
+      request.onblocked=()=>reject(new Error('IndexedDB is blocked.'));
+    });
+  }
+  function idbReadAll(db,storeName=IDB_STORE){
+    return new Promise((resolve,reject)=>{
+      const request=db.transaction(storeName,'readonly').objectStore(storeName).getAll();
+      request.onsuccess=()=>resolve(request.result||[]);
+      request.onerror=()=>reject(request.error||new Error('IndexedDB read failed.'));
+    });
+  }
+  function idbUpdatePuzzleRows(entries=[],deletedCodes=[]){
+    if(!idbDatabase)return Promise.reject(new Error('IndexedDB is unavailable.'));
+    return new Promise((resolve,reject)=>{
+      const transaction=idbDatabase.transaction(IDB_PUZZLE_STORE,'readwrite');
+      const store=transaction.objectStore(IDB_PUZZLE_STORE);
+      deletedCodes.forEach(code=>store.delete(code));
+      entries.forEach(entry=>store.put({code:entry.code,value:entry.value}));
+      transaction.oncomplete=()=>resolve(true);
+      transaction.onerror=()=>reject(transaction.error||new Error('Puzzle cache update failed.'));
+      transaction.onabort=()=>reject(transaction.error||new Error('Puzzle cache update aborted.'));
+    });
+  }
+  function idbDeleteKey(key){
+    if(!idbDatabase)return Promise.reject(new Error('IndexedDB is unavailable.'));
+    return new Promise((resolve,reject)=>{
+      const transaction=idbDatabase.transaction(IDB_STORE,'readwrite');
+      transaction.objectStore(IDB_STORE).delete(key);
+      transaction.oncomplete=()=>resolve(true);
+      transaction.onerror=()=>reject(transaction.error||new Error('IndexedDB key deletion failed.'));
+      transaction.onabort=()=>reject(transaction.error||new Error('IndexedDB key deletion aborted.'));
+    });
+  }
+  function idbReplaceAll(kvRows=[],puzzleRows=[]){
+    return new Promise((resolve,reject)=>{
+      const request=indexedDB.deleteDatabase(IDB_NAME);
+      request.onerror=()=>reject(request.error||new Error('IndexedDB compaction failed.'));
+      request.onblocked=()=>reject(new Error('IndexedDB compaction was blocked.'));
+      request.onsuccess=()=>{
+        const openRequest=indexedDB.open(IDB_NAME,IDB_VERSION);
+        openRequest.onupgradeneeded=()=>{const db=openRequest.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'key'});if(!db.objectStoreNames.contains(IDB_PUZZLE_STORE))db.createObjectStore(IDB_PUZZLE_STORE,{keyPath:'code'})};
+        openRequest.onerror=()=>reject(openRequest.error||new Error('IndexedDB recreation failed.'));
+        openRequest.onsuccess=()=>{
+          const db=openRequest.result;
+          const transaction=db.transaction([IDB_STORE,IDB_PUZZLE_STORE],'readwrite');
+          const kvStore=transaction.objectStore(IDB_STORE),puzzleStore=transaction.objectStore(IDB_PUZZLE_STORE);
+          kvRows.forEach(row=>kvStore.put(row));
+          puzzleRows.forEach(row=>puzzleStore.put(row));
+          transaction.oncomplete=()=>{idbDatabase=db;resolve(true)};
+          transaction.onerror=()=>{try{db.close()}catch(_){};reject(transaction.error||new Error('IndexedDB compaction write failed.'))};
+          transaction.onabort=()=>{try{db.close()}catch(_){};reject(transaction.error||new Error('IndexedDB compaction write aborted.'))};
+        };
+      };
+    });
+  }
+  function idbWrite(key,value){
+    if(!idbDatabase)return Promise.reject(new Error('IndexedDB is unavailable.'));
+    return new Promise((resolve,reject)=>{
+      const transaction=idbDatabase.transaction(IDB_STORE,'readwrite');
+      transaction.objectStore(IDB_STORE).put({key,value});
+      transaction.oncomplete=()=>resolve(true);
+      transaction.onerror=()=>reject(transaction.error||new Error('IndexedDB write failed.'));
+      transaction.onabort=()=>reject(transaction.error||new Error('IndexedDB write aborted.'));
+    });
+  }
+  async function initStorage(){
+    const keys=Object.values(STORAGE_KEYS);
+    try{
+      const db=await openStorageDatabase();
+      const rows=await idbReadAll(db,IDB_STORE);
+      const puzzleRows=await idbReadAll(db,IDB_PUZZLE_STORE);
+      idbDatabase=db;
+      storageBackend='indexedDB';
+      rows.forEach(row=>{if(row&&typeof row.key==='string'){storageMemory[row.key]=row.value;storageSerialized[row.key]=JSON.stringify(row.value)}});
+      for(const key of keys){
+        if(Object.prototype.hasOwnProperty.call(storageMemory,key)){try{localStorage.removeItem(key)}catch(_){};continue}
+        const legacy=localStorageRead(key);
+        if(legacy===undefined)continue;
+        storageMemory[key]=legacy;
+        storageSerialized[key]=JSON.stringify(legacy);
+        try{await idbWrite(key,legacy);try{localStorage.removeItem(key)}catch(_){}}catch(_){storageBackend='localStorage';break}
+      }
+      const existingCache=readStorage(STORAGE_KEYS.puzzleCache,{})||{};
+      puzzleRows.forEach(row=>{if(row&&typeof row.code==='string'&&row.value)existingCache[row.code]=row.value});
+      const prunedCache=prunePuzzleCache(existingCache);
+      storageMemory[STORAGE_KEYS.puzzleCache]=prunedCache;
+      storageSerialized[STORAGE_KEYS.puzzleCache]=JSON.stringify(prunedCache);
+      try{
+        const entries=Object.entries(prunedCache).map(([code,value])=>({code,value}));
+        const removedCodes=Object.keys(existingCache).filter(code=>!prunedCache[code]);
+        await idbUpdatePuzzleRows(entries,removedCodes);
+        await idbDeleteKey(STORAGE_KEYS.puzzleCache);
+      }catch(_){}
+      try{localStorage.removeItem(STORAGE_KEYS.puzzleCache)}catch(_){}
+      if(storageMemory[STORAGE_KEYS.storageMaintenance]!=='idb-v3-compacted'&&idbDatabase){
+        const kvRows=Object.entries(storageMemory).filter(([key,value])=>key!==STORAGE_KEYS.puzzleCache&&key!==STORAGE_KEYS.storageMaintenance&&value!==undefined).map(([key,value])=>({key,value}));
+        kvRows.push({key:STORAGE_KEYS.storageMaintenance,value:'idb-v3-compacted'});
+        const puzzleRows=Object.entries(prunedCache).map(([code,value])=>({code,value}));
+        try{
+          idbDatabase.close();
+          idbDatabase=null;
+          await idbReplaceAll(kvRows,puzzleRows);
+          storageBackend='indexedDB';
+          storageMemory[STORAGE_KEYS.storageMaintenance]='idb-v3-compacted';
+          storageSerialized[STORAGE_KEYS.storageMaintenance]=JSON.stringify('idb-v3-compacted');
+        }catch(_){
+          try{idbDatabase=await openStorageDatabase();storageBackend='indexedDB'}catch(__){storageBackend='localStorage';kvRows.forEach(row=>localStorageWrite(row.key,row.value));puzzleRows.forEach(row=>localStorageWrite(`${STORAGE_KEYS.puzzleCache}.${row.code}`,row.value))}
+        }
+      }
+      const existingRecent=readStorage(STORAGE_KEYS.recentPuzzles,null);
+      const compactRecent=compactRecentItems(existingRecent);
+      if(Array.isArray(existingRecent)&&JSON.stringify(existingRecent)!==JSON.stringify(compactRecent))writeStorage(STORAGE_KEYS.recentPuzzles,compactRecent);
+    }catch(_){
+      storageBackend='localStorage';
+      keys.forEach(key=>{const legacy=localStorageRead(key);if(legacy!==undefined)storageMemory[key]=legacy});
+    }
+  }
   function readStorage(key,fallback){return Object.prototype.hasOwnProperty.call(storageMemory,key)?storageMemory[key]:fallback}
   function writeStorage(key,value){
-    storageMemory[key] = value;
-    if (storageDb && !storageFallbackToLocalStorage) {
-      storageWriteChain = storageWriteChain.then(() => writeIndexedDbValue(storageDb, key, value)).catch(error => {
-        storageFallbackToLocalStorage = true;
-        try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
-        console.warn('IndexedDB write failed; switched to localStorage fallback.', error);
-      });
-    } else {
-      try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { return false; }
+    const serialized=JSON.stringify(value);
+    storageMemory[key]=value;
+    if(storageSerialized[key]===serialized)return true;
+    storageSerialized[key]=serialized;
+    if(storageBackend==='indexedDB'){
+      idbWrite(key,value).catch(()=>{storageBackend='localStorage';localStorageWrite(key,value)});
+      return true;
     }
-    return true;
+    return localStorageWrite(key,value);
   }
   function getProgressStore(){const value=readStorage(STORAGE_KEYS.progress,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
-  function getProgress(code){return getProgressStore()[code]||null}
+  function getProgress(code){const normalized=normalizeCode(code);const store=getProgressStore();const progress=store[normalized]||null;if(progressExpired(normalized,progress)){delete store[normalized];writeStorage(STORAGE_KEYS.progress,store);return null}return progress}
+  function getSolutionWarningStore(){const value=readStorage(STORAGE_KEYS.solutionWarnings,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
+  function solutionWarningAcknowledged(code){return Boolean(code&&getSolutionWarningStore()[code])}
+  function acknowledgeSolutionWarning(code){if(!code)return;const store=getSolutionWarningStore();store[code]=true;writeStorage(STORAGE_KEYS.solutionWarnings,store)}
   function puzzleCodeOf(record){return normalizeCode(record?.puzzle_number||record?.puzzleNumber||record?.code)}
   function getLikedPuzzleStore(){const value=readStorage(STORAGE_KEYS.likedPuzzles,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getLikedPuzzles(){return Object.values(getLikedPuzzleStore()).filter(record=>puzzleCodeOf(record))}
   function isLiked(code){return Boolean(getLikedPuzzleStore()[normalizeCode(code)])}
+  function progressExpired(code,record,now=Date.now()){const updatedAt=Number(record?.updatedAt)||0;return Boolean(record&&!isLiked(code)&&(updatedAt<=0||now-updatedAt>=PROGRESS_RETENTION_MS))}
+  function cleanupExpiredUnlikedProgress({now=Date.now()}={}){
+    const store=getProgressStore();let changed=false;
+    Object.entries(store).forEach(([code,record])=>{if(progressExpired(code,record,now)){delete store[code];changed=true}});
+    if(changed)writeStorage(STORAGE_KEYS.progress,store);
+    return changed;
+  }
+  function enforceLikedPuzzleLimit(){
+    const store=getLikedPuzzleStore();
+    const entries=Object.entries(store).filter(([code,record])=>validCode(normalizeCode(code))&&record&&typeof record==='object');
+    entries.sort(([,a],[,b])=>Number(b?.likedAt||b?.updatedAt||0)-Number(a?.likedAt||a?.updatedAt||0));
+    const trimmed=Object.fromEntries(entries.slice(0,MAX_LIKED_PUZZLES));
+    if(JSON.stringify(trimmed)!==JSON.stringify(store))saveLikedPuzzleStore(trimmed);
+    return trimmed;
+  }
   function forgetPuzzleFromLocalStorage(code){
     const normalized=normalizeCode(code);if(!normalized)return;
     const liked=getLikedPuzzleStore();delete liked[normalized];saveLikedPuzzleStore(liked);
     const recent=readStorage(STORAGE_KEYS.recentPuzzles,[]);
     if(Array.isArray(recent))writeStorage(STORAGE_KEYS.recentPuzzles,recent.filter(record=>puzzleCodeOf(record)!==normalized));
-    const cache=getPuzzleCache();delete cache[normalized];writeStorage(STORAGE_KEYS.puzzleCache,cache);
+    const cache=getPuzzleCache();delete cache[normalized];savePuzzleCache(cache,[],[normalized]);
     const progress=getProgressStore();delete progress[normalized];writeStorage(STORAGE_KEYS.progress,progress);
     removedPuzzleCodes.delete(normalized);
     libraryItems=showingLiked?getLikedPuzzles():libraryItems.filter(record=>puzzleCodeOf(record)!==normalized);
@@ -292,7 +386,7 @@
     updateCurrentLikeButton();
     toast(`Removed ${normalized} from local storage.`);
   }
-  function saveLikedPuzzleStore(value){writeStorage(STORAGE_KEYS.likedPuzzles,value);return JSON.stringify(readStorage(STORAGE_KEYS.likedPuzzles,{}))===JSON.stringify(value)}
+  function saveLikedPuzzleStore(value){return writeStorage(STORAGE_KEYS.likedPuzzles,value)}
   
   function updateCurrentLikeButton(){
     const button=$('currentLikeBtn');
@@ -310,20 +404,25 @@
     button.setAttribute('aria-label',button.title);
   }
 
-  function toggleLike(record){
+  async function toggleLike(record){
     const code=puzzleCodeOf(record);
     if(!code)return;
     const liked=getLikedPuzzleStore();
     const wasLiked=Boolean(liked[code]);
+    if(!wasLiked&&Object.keys(liked).length>=MAX_LIKED_PUZZLES){
+      await showAppDialog({kicker:'Liked puzzles',title:'25-puzzle limit reached',message:'You can like up to 25 Sudoku puzzles. Remove a liked puzzle before adding another one.',confirmLabel:'Got it',showCancel:false});
+      return;
+    }
     if(wasLiked) delete liked[code];
-    else liked[code]={...record,puzzle_number:code,puzzle:state.puzzle?.raw||record.puzzle||getCachedPuzzlePayload(code)?.puzzle||null};
+    else liked[code]={...record,puzzle_number:code,likedAt:Date.now(),puzzle:state.puzzle?.raw||record.puzzle||getCachedPuzzlePayload(code)?.puzzle||null};
     if(!saveLikedPuzzleStore(liked))return;
     if(showingLiked) libraryItems=getLikedPuzzles();
     renderLibrary();
     updateCurrentLikeButton();
   }
 
-  function cacheRecentPuzzles(items){const recent=Array.isArray(items)?items.slice(0,RECENT_CACHE_LIMIT):[];if(recent.length)writeStorage(STORAGE_KEYS.recentPuzzles,recent)}
+  function compactRecentItems(items){return Array.isArray(items)?items.slice(0,RECENT_CACHE_LIMIT).map(({puzzle,...record})=>record):[]}
+  function cacheRecentPuzzles(items){const recent=compactRecentItems(items);if(recent.length)writeStorage(STORAGE_KEYS.recentPuzzles,recent)}
   function getCachedRecentPuzzles(){
     const cached=readStorage(STORAGE_KEYS.recentPuzzles,[]);
     if(Array.isArray(cached)&&cached.length)return cached.slice(0,RECENT_CACHE_LIMIT);
@@ -331,28 +430,79 @@
     return fallback.slice(0,RECENT_CACHE_LIMIT);
   }
   function getPuzzleCache(){const value=readStorage(STORAGE_KEYS.puzzleCache,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
+  function prunePuzzleCache(cache){const entries=Object.entries(cache&&typeof cache==='object'&&!Array.isArray(cache)?cache:{});entries.sort(([,a],[,b])=>Number(b?.updatedAt||0)-Number(a?.updatedAt||0));return Object.fromEntries(entries.slice(0,PUZZLE_CACHE_LIMIT))}
+  function savePuzzleCache(cache,changedCodes=[],removedCodes=[]){const pruned=prunePuzzleCache(cache);storageMemory[STORAGE_KEYS.puzzleCache]=pruned;const removed=new Set([...removedCodes,...Object.keys(cache||{}).filter(code=>!pruned[code])]);if(storageBackend==='indexedDB'&&idbDatabase?.objectStoreNames.contains(IDB_PUZZLE_STORE)){storageSerialized[STORAGE_KEYS.puzzleCache]=JSON.stringify(pruned);const entries=changedCodes.map(code=>({code,value:pruned[code]})).filter(entry=>entry.value);idbUpdatePuzzleRows(entries,[...removed]).catch(()=>{storageBackend='localStorage';localStorageWrite(STORAGE_KEYS.puzzleCache,pruned)});return true}return writeStorage(STORAGE_KEYS.puzzleCache,pruned)}
   function getCachedPuzzlePayload(code){return getPuzzleCache()[normalizeCode(code)]||null}
-  function cachePuzzlePayload(code,puzzle,record){if(!code||!puzzle)return;const cache=getPuzzleCache();cache[normalizeCode(code)]={code:normalizeCode(code),record:{...(record||{}),puzzle_number:normalizeCode(code)},puzzle,updatedAt:Date.now()};writeStorage(STORAGE_KEYS.puzzleCache,cache)}
-  async function preloadPuzzlePayloads(items){const missing=(items||[]).filter(item=>puzzleCodeOf(item)&&!getCachedPuzzlePayload(puzzleCodeOf(item)));await Promise.allSettled(missing.slice(0,RECENT_CACHE_LIMIT).map(async item=>{try{const data=await apiFetch(`/puzzles/${encodeURIComponent(puzzleCodeOf(item))}`);cachePuzzlePayload(data.puzzleNumber||puzzleCodeOf(item),data.puzzle,{puzzle_number:data.puzzleNumber||puzzleCodeOf(item),...(data.metadata||item)})}catch(_){}}))}
+  function cachePuzzlePayload(code,puzzle,record){if(!code||!puzzle)return;const normalized=normalizeCode(code);const cache=getPuzzleCache();cache[normalized]={code:normalized,record:{...(record||{}),puzzle_number:normalized},puzzle,updatedAt:Date.now()};savePuzzleCache(cache,[normalized])}
+  function currentDayKey(){return new Date().toISOString().slice(0,10)}
+  function getFreshLibrarySnapshot(){const snapshot=readStorage(STORAGE_KEYS.librarySnapshot,null);if(!snapshot||snapshot.dayKey!==currentDayKey()||Date.now()-Number(snapshot.fetchedAt||0)>LIBRARY_CACHE_TTL_MS||!Array.isArray(snapshot.items)||!snapshot.items.length)return null;return snapshot}
+  function cacheLibrarySnapshot(items,offset,hasMore,nextOffset){const compactItems=(items||[]).map(({puzzle,...record})=>record);writeStorage(STORAGE_KEYS.librarySnapshot,{dayKey:currentDayKey(),fetchedAt:Date.now(),items:compactItems,offset,hasMore,nextOffset})}
+  function cacheBatchPuzzlePayloads(items){const cache=getPuzzleCache(),changed=[];(items||[]).forEach(item=>{const code=puzzleCodeOf(item);if(code&&item?.puzzle){cache[code]={code,record:{...item,puzzle_number:code},puzzle:item.puzzle,updatedAt:Date.now()};changed.push(code)}});if(changed.length)savePuzzleCache(cache,changed)}
+  function getLoadedBatchRecords(){
+    const snapshot=getFreshLibrarySnapshot();
+    const candidates=[...(snapshot?.items||[]),...(Array.isArray(libraryItems)?libraryItems:[])];
+    const seen=new Set();
+    return candidates.map(record=>{
+      const code=puzzleCodeOf(record);
+      if(!code||seen.has(code))return null;
+      seen.add(code);
+      const cached=getCachedPuzzlePayload(code);
+      return record?.puzzle||!cached?.puzzle?record:{...record,puzzle:cached.puzzle};
+    }).filter(Boolean);
+  }
+  function matchesLibraryFilters(record){
+    const difficulty=$('difficultyFilter').value;
+    const gridType=$('gridTypeFilter').value;
+    const gridCount=$('gridCountFilter').value;
+    const constraint=$('constraintFilter').value.trim().toLowerCase();
+    return (!difficulty||record.difficulty===difficulty)&&(!gridType||record.grid_type===gridType)&&(!gridCount||String(record.grid_count||1)===String(gridCount))&&(!constraint||String(record.constraint_type||'').toLowerCase().includes(constraint));
+  }
+  function applyFiltersLocalFirst(){
+    const candidates=getLoadedBatchRecords();
+    if(!candidates.length){fetchLibrary({reset:true});return}
+    const hasFilter=Boolean($('difficultyFilter').value||$('gridTypeFilter').value||$('gridCountFilter').value||$('constraintFilter').value.trim());
+    const matches=candidates.filter(matchesLibraryFilters);
+    if(!matches.length&&hasFilter){fetchLibrary({reset:true});return}
+    showingLiked=false;libraryItems=matches;libraryOffset=matches.length;libraryHasMore=false;libraryVisibleCount=LIBRARY_PAGE_SIZE;renderLibrary();$('libraryStatus').textContent=matches.length?`${Math.min(libraryVisibleCount,matches.length)} of ${matches.length} loaded puzzle${matches.length===1?'':'s'} match.`:'No puzzles match these filters.';updateLoadMoreButton();
+  }
+  function updateLoadMoreButton(){const button=$('loadMoreBtn');if(!button)return;const selectedStatus=$('statusFilter')?.value||'';const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;const canReveal=!showingLiked&&filteredCount>libraryVisibleCount;const canFetch=!showingLiked&&libraryHasMore;button.classList.toggle('hidden',!(canReveal||canFetch));button.disabled=libraryLoading}
   function renderCachedLibraryImmediately(){
-    const cached=getCachedRecentPuzzles();
-    if(!cached.length)return false;
-    const hydrated=cached.map(record=>{
-      const code=puzzleCodeOf(record),payload=getCachedPuzzlePayload(code);
-      return payload?.puzzle ? {...record,...(payload.record||{}),puzzle_number:code,puzzle:payload.puzzle} : record;
-    });
-    libraryItems=hydrated;
-    libraryOffset=hydrated.length;
-    libraryHasMore=false;
-    renderLibrary(hydrated);
-    $('libraryStatus').textContent=`${hydrated.length} saved puzzle${hydrated.length===1?'':'s'} ready — refreshing…`;
-    $('loadMoreBtn').classList.add('hidden');
+    const snapshot=getFreshLibrarySnapshot();
+    if(!snapshot)return false;
+    libraryItems=snapshot.items;
+    libraryOffset=Number(snapshot.offset||snapshot.items.length);
+    libraryHasMore=Boolean(snapshot.hasMore);
+    libraryVisibleCount=LIBRARY_PAGE_SIZE;
+    renderLibrary();
+    $('libraryStatus').textContent=`${Math.min(libraryVisibleCount,libraryItems.length)} of ${libraryItems.length} saved puzzles ready.`;
     return true;
   }
 
   function isRecentRequest(reset){return Boolean(reset&&!$('difficultyFilter').value&&!$('gridTypeFilter').value&&!$('gridCountFilter').value&&!$('constraintFilter').value.trim())}
   function normalizeCode(value){return String(value||'').trim().toUpperCase()}
   function toast(message,duration=1500){const el=$('toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),duration)}
+  let appDialogResolver=null;
+  function resolveAppDialog(confirmed){
+    const resolver=appDialogResolver;if(!resolver)return;
+    appDialogResolver=null;
+    const modal=$('appDialog');
+    modal?.classList.remove('open');modal?.setAttribute('aria-hidden','true');
+    syncPopupScrollLock();
+    resolver({confirmed});
+  }
+  function showAppDialog({kicker='Lovdoku',title='Please confirm',message='',confirmLabel='Continue',cancelLabel='Cancel',showCancel=true}={}){
+    const modal=$('appDialog');
+    if(!modal)return Promise.resolve({confirmed:window.confirm(message)});
+    $('appDialogKicker').textContent=kicker;
+    $('appDialogTitle').textContent=title;
+    $('appDialogMessage').textContent=message;
+    $('appDialogConfirm').textContent=confirmLabel;
+    $('appDialogCancel').textContent=cancelLabel;
+    $('appDialogCancel').classList.toggle('hidden',!showCancel);
+    modal.classList.add('open');modal.setAttribute('aria-hidden','false');syncPopupScrollLock();
+    setTimeout(()=>$('appDialogConfirm')?.focus(),0);
+    return new Promise(resolve=>{appDialogResolver=resolve});
+  }
   function validCode(code){return /^[A-Z]\d{4}$/.test(code)}
 
   function liveElapsed(){if(!state.startedAt||state.finished)return Math.max(0,state.elapsed);return Math.max(state.elapsed,Math.floor((Date.now()-state.startedAt)/1000));}
@@ -360,7 +510,8 @@
   function hasPlayerEntries(){return Boolean(state.puzzle&&state.values.some((v,i)=>!state.givens[i]&&v));}
   function restoreProgress(progress){if(!progress)return;state.values=Array.from({length:state.puzzle.total},(_,i)=>state.givens[i]?state.givens[i]:num(progress.values?.[i]));state.notes=Array.from({length:state.puzzle.total},(_,i)=>new Set(Array.isArray(progress.notes?.[i])?progress.notes[i].map(num).filter(Boolean):[]));state.elapsed=hasPlayerEntries()?Math.max(0,Number(progress.elapsed)||0):0;state.mistakes=Math.max(0,Number(progress.mistakes)||0);state.status=['Not Started','In Progress','Solved'].includes(progress.status)?progress.status:(hasPlayerEntries()?'In Progress':'Not Started');if(!hasPlayerEntries()&&state.status!=='Solved')state.status='Not Started';state.finished=state.status==='Solved'}
   function syncStatusAfterChange(){state.finished=false;state.status=isSolved()?'Solved':'In Progress';if(state.status==='Solved')state.finished=true;persistProgress();renderLibrary()}
-  function persistProgress(){if(!state.currentPuzzleCode||!state.puzzle)return;const progress=getProgressStore();progress[state.currentPuzzleCode]=currentProgressRecord();writeStorage(STORAGE_KEYS.progress,progress)}
+  let lastProgressWriteAt=0;
+  function persistProgress({immediate=true}={}){if(!state.currentPuzzleCode||!state.puzzle)return;const now=Date.now();if(!immediate&&now-lastProgressWriteAt<PROGRESS_WRITE_INTERVAL_MS)return;lastProgressWriteAt=now;const progress=getProgressStore();progress[state.currentPuzzleCode]=currentProgressRecord();writeStorage(STORAGE_KEYS.progress,progress)}
   function setStatusFromState(){if(state.status==='Solved')setStatus('Solved','Puzzle complete — every required cell is correct.','ok');else if(state.status==='In Progress')setStatus('In Progress','Your progress is being saved automatically.','');else setStatus('Not Started','Select a cell and enter a number.','')}
 
   function apiReady(){return API_BASE_URL && !API_BASE_URL.includes('PASTE_YOUR_WORKER_URL_HERE')}
@@ -379,7 +530,8 @@
 
   function renderLibrary(itemsOverride=null,append=false){
     const selectedStatus=$('statusFilter').value;
-    const items=(itemsOverride??libraryItems).filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus);
+    const filtered=(itemsOverride??libraryItems).filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus);
+    const items=showingLiked?filtered:filtered.slice(0,libraryVisibleCount);
     const list=$('libraryList');
     if(!append) list.innerHTML='';
     if(!items.length&&!append){$('libraryEmpty').classList.remove('hidden');$('loadMoreBtn').classList.add('hidden');return}
@@ -399,9 +551,18 @@
       }
       item.append(code,main,meta,actions);list.appendChild(item);
     });
+    updateLoadMoreButton();
   }
 
-  function showLikedPuzzles(){showingLiked=true;libraryItems=getLikedPuzzles();libraryOffset=libraryItems.length;libraryHasMore=false;renderLibrary();$('libraryStatus').textContent=libraryItems.length?`${libraryItems.length} liked puzzle${libraryItems.length===1?'':'s'}.`:'No liked puzzles yet.';$('loadMoreBtn').classList.add('hidden')}
+  function showLikedPuzzles(){showingLiked=true;libraryItems=getLikedPuzzles();libraryOffset=libraryItems.length;libraryVisibleCount=libraryItems.length;libraryHasMore=false;renderLibrary();$('libraryStatus').textContent=libraryItems.length?`${libraryItems.length} liked puzzle${libraryItems.length===1?'':'s'}.`:'No liked puzzles yet.'}
+
+  async function handleLoadMore(){
+    if(libraryLoading)return;
+    const selectedStatus=$('statusFilter')?.value||'';
+    const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;
+    if(filteredCount>libraryVisibleCount){libraryVisibleCount+=LIBRARY_PAGE_SIZE;renderLibrary();return}
+    if(libraryHasMore){libraryVisibleCount+=LIBRARY_PAGE_SIZE;await fetchLibrary({reset:false})}
+  }
 
   async function fetchLibrary({reset=true}={}){
     if(libraryLoading)return;
@@ -410,7 +571,8 @@
     libraryLoading=true;$('applyFiltersBtn').disabled=true;$('loadMoreBtn').disabled=true;$('libraryStatus').textContent='Loading puzzles…';
     try{
       const params=new URLSearchParams();
-      params.set('limit','5');
+      params.set('limit',String(LIBRARY_BATCH_LIMIT));
+      params.set('include','full');
       params.set('offset',reset?'0':String(libraryOffset));
       const difficulty=$('difficultyFilter').value,gridType=$('gridTypeFilter').value,gridCount=$('gridCountFilter').value,constraint=$('constraintFilter').value.trim();
       if(difficulty)params.set('difficulty',difficulty);
@@ -418,18 +580,20 @@
       if(gridCount)params.set('gridCount',gridCount);
       if(constraint)params.set('constraint',constraint);
       const data=await apiFetch(`/puzzles?${params.toString()}`);
-      if(reset)libraryItems=[];libraryOffset=Number(data.nextOffset??(Number(data.offset||0)+Number(data.limit||5)));libraryHasMore=Boolean(data.hasMore);
+      if(reset){libraryItems=[];libraryVisibleCount=LIBRARY_PAGE_SIZE}
+      libraryOffset=Number(data.nextOffset??(Number(data.offset||0)+Number(data.limit||LIBRARY_BATCH_LIMIT)));libraryHasMore=Boolean(data.hasMore);
       libraryItems=reset?[...(data.items||[])]:[...libraryItems,...(data.items||[])];
-      if(recentRequest)cacheRecentPuzzles(data.items||[]);
-      preloadPuzzlePayloads(data.items||[]);
+      cacheBatchPuzzlePayloads(data.items||[]);
+      if(recentRequest){cacheRecentPuzzles(data.items||[]);cacheLibrarySnapshot(libraryItems,libraryOffset,libraryHasMore,data.nextOffset)}
       renderLibrary();
-      $('libraryStatus').textContent=libraryItems.length?`${libraryItems.length} puzzle${libraryItems.length===1?'':'s'} loaded.`:'No puzzles match these selections.';
-      $('loadMoreBtn').classList.toggle('hidden',!libraryHasMore);
+      $('libraryStatus').textContent=libraryItems.length?`${Math.min(libraryVisibleCount,libraryItems.length)} of ${libraryItems.length} puzzles loaded.`:'No puzzles match these selections.';
+      updateLoadMoreButton();
     }catch(err){
       const cached=recentRequest?getCachedRecentPuzzles():[];
       if(cached.length){
         libraryItems=cached;
         libraryOffset=cached.length;
+        libraryVisibleCount=LIBRARY_PAGE_SIZE;
         libraryHasMore=false;
         renderLibrary();
         $('libraryStatus').textContent=`Showing ${cached.length} saved recent puzzle${cached.length===1?'':'s'}.`;
@@ -446,9 +610,15 @@
     showingLiked=false;
     $('libraryStatus').textContent='Searching…';
     $('libraryList').innerHTML='';$('libraryEmpty').classList.add('hidden');$('loadMoreBtn').classList.add('hidden');
+    const localRecord=getLoadedBatchRecords().find(record=>puzzleCodeOf(record)===code&&record?.puzzle);
+    if(localRecord){
+      libraryItems=[localRecord];libraryOffset=1;libraryHasMore=false;libraryVisibleCount=1;renderLibrary();$('libraryStatus').textContent='1 puzzle found in the loaded batch.';$('libraryEmpty').classList.add('hidden');return;
+    }
     try{
       const data=await apiFetch(`/puzzles/${encodeURIComponent(code)}`);
-      libraryItems=[{puzzle_number:data.puzzleNumber,...data.metadata}];
+      const searchRecord={puzzle_number:data.puzzleNumber,...data.metadata,puzzle:data.puzzle};
+      cachePuzzlePayload(data.puzzleNumber||code,data.puzzle,searchRecord);
+      libraryItems=[searchRecord];
       renderLibrary();
       $('libraryStatus').textContent='1 puzzle found.';
       $('libraryEmpty').classList.add('hidden');
@@ -457,19 +627,22 @@
     }
   }
 
+  function focusPuzzleBoard(){
+    const target=document.querySelector('.play-card')||$('board');
+    if(!target||!state.puzzle)return;
+    const scroll=()=>target.scrollIntoView({behavior:'smooth',block:'start'});
+    requestAnimationFrame(()=>{scroll();setTimeout(scroll,350)});
+  }
+
   async function openRemotePuzzle(recordOrCode){
     const record=typeof recordOrCode==='string'?{puzzle_number:recordOrCode}:recordOrCode||{};
     const code=puzzleCodeOf(record);
     if(!code)return;
-    if(record.puzzle){
-      load(record.puzzle,{code,record,progress:getProgress(code)});
-      document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
-      return;
-    }
-    const cached=getCachedPuzzlePayload(code);
-    if(cached?.puzzle){
-      const cachedRecord={puzzle_number:code,...(cached.record||record)};
-      load(cached.puzzle,{code,record:cachedRecord,progress:getProgress(code)});
+    const cachedPayload=getCachedPuzzlePayload(code);
+    if(record.puzzle||cachedPayload?.puzzle){
+      const puzzle=record.puzzle||cachedPayload.puzzle;
+      const cachedRecord=record.puzzle?record:{...(cachedPayload.record||{}),...record,puzzle_number:code};
+      load(puzzle,{code,record:cachedRecord,progress:getProgress(code)});
       document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
       return;
     }
@@ -481,6 +654,13 @@
       load(data.puzzle,{code:normalizedCode,record:fullRecord,progress:getProgress(normalizedCode)});
       document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
     }catch(err){
+      const cached=getCachedPuzzlePayload(code);
+      if(cached?.puzzle){
+        const cachedRecord={puzzle_number:code,...(cached.record||record)};
+        load(cached.puzzle,{code,record:cachedRecord,progress:getProgress(code)});
+        document.querySelector('.play-card')?.scrollIntoView({behavior:'smooth',block:'start'});
+        return;
+      }
       if(err.status===404){
         const isSavedLiked=isLiked(code)||showingLiked;
         if(isSavedLiked){
@@ -499,6 +679,7 @@
   }
 
   function exportProgress(){
+    cleanupExpiredUnlikedProgress();
     const payload={format:'lovdoku-progress',version:1,exportedAt:new Date().toISOString(),progress:getProgressStore()};
     const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lovdoku-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
@@ -507,41 +688,46 @@
   function puzzleShareUrl(){
     const url=new URL(window.location.href);
     url.search='';
-    url.hash='';
-    url.searchParams.set('puzzle',state.currentPuzzleCode||'puzzle');
-    return url;
+    if(state.currentPuzzleCode)url.searchParams.set('puzzle',normalizeCode(state.currentPuzzleCode));
+    return url.toString();
   }
-
-  function progressLinkText(){
-    const code=state.currentPuzzleCode||'puzzle';
-    return `Puzzle Number: ${code}\nLink: ${puzzleShareUrl().toString()}`;
-  }
-
-  async function copyProgressLink(){
-    const text=puzzleShareUrl().toString();
+  async function copyText(text){
     try{
-      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);toast('Puzzle link copied.');return true}
-      const textarea=document.createElement('textarea');textarea.value=text;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const copied=document.execCommand('copy');textarea.remove();if(copied)toast('Puzzle link copied.');return copied;
-    }catch(_){toast('Could not copy the puzzle link.');return false}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return true}
+      const textarea=document.createElement('textarea');textarea.value=text;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const copied=document.execCommand('copy');textarea.remove();return copied;
+    }catch(_){return false}
+  }
+  async function sharePuzzleLink(){
+    if(!state.currentPuzzleCode){toast('Choose a puzzle first.');return}
+    const url=puzzleShareUrl();
+    const shareData={title:`Lovdoku Puzzle ${normalizeCode(state.currentPuzzleCode)}`,text:`Play Lovdoku puzzle ${normalizeCode(state.currentPuzzleCode)}`,url};
+    try{
+      if(typeof navigator.share==='function'){
+        await navigator.share(shareData);
+        return;
+      }
+    }catch(error){
+      if(error?.name==='AbortError')return;
+    }
+    const copied=await copyText(url);
+    toast(copied?'Puzzle link copied.':'Could not share or copy the puzzle link.',3500);
+  }
+  function showLikeStorageInfo(){
+    showAppDialog({kicker:'Saved progress',title:'How local progress is kept',message:'Liked puzzles keep their progress on this browser. Progress for puzzles you have not liked is automatically removed after 12 hours without an update. You can like up to 25 puzzles.',confirmLabel:'Got it',showCancel:false});
+  }
+  function showProgressDataInfo(){
+    showAppDialog({kicker:'Progress Data',title:'Import and export progress',message:'Export Progress downloads a JSON backup of your saved progress. Import Progress restores and merges a compatible Lovdoku JSON backup into this browser. Nothing is uploaded to the server.',confirmLabel:'Got it',showCancel:false});
   }
 
-  async function sharePuzzleLink(){
-    if(!state.puzzle){toast('Choose a puzzle first.');return false}
-    const url=puzzleShareUrl().toString();
-    if(typeof navigator.share==='function'){
-      try{
-        await navigator.share({
-          title:`Sudoku Puzzle ${state.currentPuzzleCode||'puzzle'}`,
-          text:`Try Sudoku Puzzle ${state.currentPuzzleCode||'puzzle'}`,
-          url
-        });
-        return true;
-      }catch(err){
-        if(err?.name==='AbortError')return false;
-        console.error('Native link share failed',err);
-      }
+  function sharedPuzzleCodeFromUrl(){
+    const params=new URLSearchParams(window.location.search);
+    if(!params.has('puzzle'))return null;
+    const raw=params.get('puzzle')?.trim().toUpperCase()||'';
+    if(!validCode(raw)){
+      toast('The shared puzzle link is invalid. Puzzle numbers must look like A1234.',5000);
+      return '';
     }
-    return copyProgressLink();
+    return raw;
   }
 
   async function importProgressFile(file){
@@ -554,6 +740,7 @@
         store[normalized]={code:normalized,values:Array.isArray(record.values)?record.values.map(num):[],notes:Array.isArray(record.notes)?record.notes.map(a=>Array.isArray(a)?a.map(num).filter(Boolean):[]):[],elapsed:Math.max(0,Number(record.elapsed)||0),mistakes:Math.max(0,Number(record.mistakes)||0),status:['Not Started','In Progress','Solved'].includes(record.status)?record.status:'Not Started',updatedAt:Number(record.updatedAt)||Date.now()};
       });
       if(!writeStorage(STORAGE_KEYS.progress,store))throw new Error('Progress could not be saved in this browser.');
+      cleanupExpiredUnlikedProgress();
       renderLibrary();setStatusFromState();toast('Progress imported.');
     }catch(err){toast(err.message||'The progress file could not be imported.')}
   }
@@ -725,11 +912,18 @@
   function toggleNotes(){state.notesMode=!state.notesMode;$('notesToggle').classList.toggle('on',state.notesMode);toast(state.notesMode?'Notes mode on':'Notes mode off')}
   function coloredConstraintFor(index){for(const owner of state.puzzle?.owners?.[index]||[]){if(ownerColor(owner,index))return owner.type==='custom_shading'?'Custom shading':prettyConstraint(owner.type)}return ''}
   
-  function toggleSolution(){
+  async function toggleSolution(){
     if(!state.puzzle) return;
     const solveBtn = $('solveBtn');
+    const puzzleCode=normalizeCode(state.currentPuzzleCode||state.currentPuzzleRecord?.puzzle_number);
     
     if(!state.solutionShown) {
+      if(!solutionWarningAcknowledged(puzzleCode)){
+        const result=await showAppDialog({kicker:'Solution reveal',title:'Reveal the complete solution?',message:'This will fill the unsolved cells with the answer. You can hide the solution later, but revealing it may spoil the puzzle.',confirmLabel:'Reveal solution',cancelLabel:'Keep solving'});
+        if(!result.confirmed)return;
+        acknowledgeSolutionWarning(puzzleCode);
+      }
+
       state.preSolutionValues = [...state.values];
       state.preSolutionNotes = state.notes.map(set => new Set(set));
       
@@ -783,14 +977,20 @@
     }
   }
 
-  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n))state.notes[i].delete(n);else state.notes[i].add(n);state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
+  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n)){state.notes[i].delete(n)}else{const blocker=noteConflictPeer(i,n);if(blocker!==undefined){toast(`Note ${n} rejected: that number is already nearby.`);return}state.notes[i].add(n)}state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
+  function noteConflictPeer(index,n){return [...peersOf(index)].find(p=>(state.values[p]||state.givens[p])===n)}
   function autoRemoveNote(n,index){if(!n)return;peersOf(index).forEach(p=>state.notes[p].delete(n))}
   function conflicts(){const bad=new Set();groupSets().forEach(g=>{const seen=new Map();g.forEach(i=>{const v=state.values[i]||state.givens[i];if(v){if(!seen.has(v))seen.set(v,[]);seen.get(v).push(i)}});seen.forEach(arr=>{if(arr.length>1)arr.forEach(i=>bad.add(i))})});return bad}
   function check(){const bad=conflicts();state.conflicts=bad;let wrong=0;state.values.forEach((v,i)=>{if(v&&state.solution[i]&&v!==state.solution[i]&&!state.givens[i]){state.wrong.add(i);wrong++}});state.mistakes+=wrong;if(state.values.some((v,i)=>!state.givens[i]&&v))state.status=isSolved()?'Solved':'In Progress';state.finished=state.status==='Solved';persistProgress();renderLibrary();render();if(bad.size||wrong){setStatus('Keep going','Some entries need attention. Red cells are conflicts or incorrect answers.','bad');toast(`${bad.size+wrong} answer${bad.size+wrong===1?'':'s'} need attention.`)}else if(isSolved()){setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}else{setStatus('In Progress','Your progress is being saved automatically.','');toast('No mistakes so far.')}}
   function isSolved(){return state.values.every((v,i)=>v===state.solution[i]&&v>0)}
   function checkComplete(){if(state.solution.every(Boolean)&&isSolved()){state.finished=true;state.status='Solved';persistProgress();renderLibrary();setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}}
   function hint(){if(!state.puzzle||state.selected<0){toast('Select an empty cell first.');return}let i=state.selected;if(state.givens[i]){const empties=state.values.map((v,k)=>!state.givens[k]&&!v?k:-1).filter(k=>k>=0);i=empties[0]??-1}if(i<0||!state.solution[i]){toast('No hint is available for this puzzle.');return}state.selected=i;state.values[i]=state.solution[i];state.notes[i].clear();autoRemoveNote(state.solution[i],i);state.conflicts.clear();syncStatusAfterChange();render();setStatusFromState();checkComplete()}
-  function reset(){if(!state.puzzle)return;stopTimer();state.values=[...state.givens];state.notes=Array.from({length:state.puzzle.total},()=>new Set());state.selected=-1;state.mistakes=0;state.wrong.clear();state.conflicts.clear();state.finished=false;state.status='Not Started';state.startedAt=null;state.elapsed=0;resetSolutionButtonState();persistProgress();renderLibrary();setStatusFromState();render();toast('Puzzle reset.')}
+  async function reset(){
+    if(!state.puzzle)return;
+    const result=await showAppDialog({kicker:'Reset puzzle',title:'Reset this puzzle?',message:'This will clear your entries, notes, timer, and mistakes for this puzzle. This action cannot be undone.',confirmLabel:'Reset puzzle',cancelLabel:'Keep playing'});
+    if(!result.confirmed)return;
+    stopTimer();state.values=[...state.givens];state.notes=Array.from({length:state.puzzle.total},()=>new Set());state.selected=-1;state.mistakes=0;state.wrong.clear();state.conflicts.clear();state.finished=false;state.status='Not Started';state.startedAt=null;state.elapsed=0;resetSolutionButtonState();persistProgress();renderLibrary();setStatusFromState();render();toast('Puzzle reset.')
+  }
   function updateStats(){const filled=state.values.filter(Boolean).length,total=state.puzzle?.total||81;$('filledStat').textContent=`${filled}/${total}`;$('mistakeStat').textContent=state.mistakes;$('timerStat').textContent=formatTime(state.elapsed)}
 
   function formatTime(s){
@@ -808,7 +1008,7 @@
       if(!state.finished&&state.puzzle){
         state.elapsed=liveElapsed();
         $('timerStat').textContent=formatTime(state.elapsed);
-        persistProgress();
+        persistProgress({immediate:false});
       }
     },1000);
   }
@@ -823,7 +1023,7 @@
   }
 
   function syncPopupScrollLock(){
-    const isPopupOpen=Boolean($('drawerPanel')?.classList.contains('open')||$('settingsModal')?.classList.contains('open')||$('fullscreenOverlay')?.classList.contains('active'));
+    const isPopupOpen=Boolean($('drawerPanel')?.classList.contains('open')||$('settingsModal')?.classList.contains('open')||$('fullscreenOverlay')?.classList.contains('active')||$('appDialog')?.classList.contains('open'));
     document.body.classList.toggle('popup-open',isPopupOpen);
   }
 
@@ -919,9 +1119,8 @@
     overlay.setAttribute('aria-hidden', 'false');
     syncPopupScrollLock();
 
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
+    // Use the app-level fullscreen overlay instead of native browser fullscreen.
+    // This preserves the dark theater layout without triggering the browser popup.
 
     updateFsTitle();
     updateFsGridOptions();
@@ -948,9 +1147,7 @@
     overlay.setAttribute('aria-hidden', 'true');
     syncPopupScrollLock();
 
-    if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
-    }
+    // Theater mode does not enter native browser fullscreen.
 
     render();
   }
@@ -1086,6 +1283,7 @@
     state.notes = Array.from({length: parsed.total}, () => new Set());
     state.selected = -1;
     state.notesMode = false;
+    $('notesToggle')?.classList.remove('on');
     state.mistakes = 0;
     state.wrong.clear();
     state.conflicts.clear();
@@ -1098,6 +1296,7 @@
 
     resetBoardAppearance();
     applyPuzzleAppearance(parsed);
+    applyFontSettings();
     resetSolutionButtonState();
 
     if(progress){
@@ -1126,26 +1325,6 @@
   }
 
   function setupEventListeners() {
-    document.addEventListener('pointerdown', (e) => {
-      if (state.selected === -1) return;
-
-      const board = $('board');
-      const keypad = $('keypad');
-      const notesToggle = $('notesToggle');
-      const hintButton = $('hintBtn');
-
-      if (board && board.contains(e.target)) return;
-      // These controls operate on the selected cell; keep the selection long enough for
-      // their click handlers to complete. Every other screen/fullscreen surface is outside
-      // the grid and clears the selection immediately.
-      if (keypad && keypad.contains(e.target)) return;
-      if (notesToggle && notesToggle.contains(e.target)) return;
-      if (hintButton && hintButton.contains(e.target)) return;
-
-      state.selected = -1;
-      render();
-    });
-
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
       if (!state.puzzle) return;
@@ -1268,13 +1447,19 @@
     }
 
     $('searchPuzzleBtn')?.addEventListener('click', searchPuzzle);
-    $('applyFiltersBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
-    $('loadMoreBtn')?.addEventListener('click', () => fetchLibrary({ reset: false }));
+    $('applyFiltersBtn')?.addEventListener('click', applyFiltersLocalFirst);
+    $('loadMoreBtn')?.addEventListener('click', handleLoadMore);
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
-
+    $('likeInfoBtn')?.addEventListener('click', showLikeStorageInfo);
+    $('progressInfoBtn')?.addEventListener('click', showProgressDataInfo);
     $('shareBtn')?.addEventListener('click', sharePuzzleLink);
+    $('appDialogConfirm')?.addEventListener('click', () => resolveAppDialog(true));
+    $('appDialogCancel')?.addEventListener('click', () => resolveAppDialog(false));
+    $('appDialogDismiss')?.addEventListener('click', () => resolveAppDialog(false));
+    $('appDialog')?.addEventListener('click', event => { if(event.target.id==='appDialog') resolveAppDialog(false); });
+    document.addEventListener('keydown', event => { if(event.key==='Escape'&&$('appDialog')?.classList.contains('open')) resolveAppDialog(false); });
 
     $('gridTypeFilter')?.addEventListener('change', updateGridCountOptions);
 
@@ -1329,14 +1514,13 @@
       updateFontPreviewCell();
     });
 
-    $('fontSizeRange')?.addEventListener('input', (e) => {
-      fontSettings.sizePct = Number(e.target.value);
-      if ($('fontSizeValDisplay')) $('fontSizeValDisplay').textContent = `${fontSettings.sizePct}%`;
+    $('fontWeightSelect')?.addEventListener('change', (e) => {
+      fontSettings.weight = e.target.value;
       updateFontPreviewCell();
     });
 
-    $('fontWeightSelect')?.addEventListener('change', (e) => {
-      fontSettings.weight = e.target.value;
+    $('entryColorSelect')?.addEventListener('change', (e) => {
+      fontSettings.entryColor = e.target.value;
       updateFontPreviewCell();
     });
 
@@ -1349,7 +1533,7 @@
     $('resetFontSettingsBtn')?.addEventListener('click', () => {
       fontSettings = { ...defaultFontSettings };
       saveFontSettings();
-      toast('Font settings reset.');
+      toast('Appearance settings reset.');
     });
 
     $('noticeNextBtn')?.addEventListener('click', () => window.noticeCarousel?.toggle());
@@ -1368,26 +1552,18 @@
     });
   }
 
-  async function openPuzzleFromUrl(){
-    const code=normalizeCode(new URLSearchParams(window.location.search).get('puzzle'));
-    if(!code)return false;
-    if(!validCode(code)){
-      toast('This shared puzzle link is invalid.');
-      return false;
-    }
-    await openRemotePuzzle(code);
-    return true;
-  }
-
   async function init() {
+    await initStorage();
+    enforceLikedPuzzleLimit();
+    cleanupExpiredUnlikedProgress();
+    if(!progressCleanupTimer)progressCleanupTimer=setInterval(cleanupExpiredUnlikedProgress,PROGRESS_CLEANUP_INTERVAL_MS);
     setupPwa();
-    await storageReady;
     loadFontSettings();
     setupEventListeners();
     window.noticeCarousel?.initialize();
-    renderCachedLibraryImmediately();
-    const sharedPuzzleOpened=await openPuzzleFromUrl();
-    if(!sharedPuzzleOpened)fetchLibrary({ reset: true });
+    const sharedPuzzleCode=sharedPuzzleCodeFromUrl();
+    if(sharedPuzzleCode)openRemotePuzzle(sharedPuzzleCode).then(()=>focusPuzzleBoard());
+    if(!renderCachedLibraryImmediately())fetchLibrary({ reset: true });
   }
 
   if (document.readyState === 'loading') {

@@ -467,6 +467,22 @@ button { border: 0; cursor: pointer; }
   border-radius: 8px;
 }
 
+.like-info-btn {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.like-info-btn:hover {
+  transform: none;
+}
+
 .current-like-btn.liked {
   color: var(--bad);
   background: var(--bad-bg);

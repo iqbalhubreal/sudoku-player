@@ -94,6 +94,10 @@
   const LIBRARY_CACHE_TTL_MS = 15 * 60 * 1000;
   const PUZZLE_CACHE_LIMIT = 50;
   const PROGRESS_WRITE_INTERVAL_MS = 15 * 1000;
+  const PROGRESS_RETENTION_MS = 12 * 60 * 60 * 1000;
+  const PROGRESS_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+  const MAX_LIKED_PUZZLES = 25;
+  let progressCleanupTimer = null;
   let libraryItems = [];
   let libraryOffset = 0;
   let libraryVisibleCount = LIBRARY_PAGE_SIZE;
@@ -346,7 +350,7 @@
     return localStorageWrite(key,value);
   }
   function getProgressStore(){const value=readStorage(STORAGE_KEYS.progress,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
-  function getProgress(code){return getProgressStore()[code]||null}
+  function getProgress(code){const normalized=normalizeCode(code);const store=getProgressStore();const progress=store[normalized]||null;if(progressExpired(normalized,progress)){delete store[normalized];writeStorage(STORAGE_KEYS.progress,store);return null}return progress}
   function getSolutionWarningStore(){const value=readStorage(STORAGE_KEYS.solutionWarnings,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function solutionWarningAcknowledged(code){return Boolean(code&&getSolutionWarningStore()[code])}
   function acknowledgeSolutionWarning(code){if(!code)return;const store=getSolutionWarningStore();store[code]=true;writeStorage(STORAGE_KEYS.solutionWarnings,store)}
@@ -354,6 +358,21 @@
   function getLikedPuzzleStore(){const value=readStorage(STORAGE_KEYS.likedPuzzles,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
   function getLikedPuzzles(){return Object.values(getLikedPuzzleStore()).filter(record=>puzzleCodeOf(record))}
   function isLiked(code){return Boolean(getLikedPuzzleStore()[normalizeCode(code)])}
+  function progressExpired(code,record,now=Date.now()){const updatedAt=Number(record?.updatedAt)||0;return Boolean(record&&!isLiked(code)&&(updatedAt<=0||now-updatedAt>=PROGRESS_RETENTION_MS))}
+  function cleanupExpiredUnlikedProgress({now=Date.now()}={}){
+    const store=getProgressStore();let changed=false;
+    Object.entries(store).forEach(([code,record])=>{if(progressExpired(code,record,now)){delete store[code];changed=true}});
+    if(changed)writeStorage(STORAGE_KEYS.progress,store);
+    return changed;
+  }
+  function enforceLikedPuzzleLimit(){
+    const store=getLikedPuzzleStore();
+    const entries=Object.entries(store).filter(([code,record])=>validCode(normalizeCode(code))&&record&&typeof record==='object');
+    entries.sort(([,a],[,b])=>Number(b?.likedAt||b?.updatedAt||0)-Number(a?.likedAt||a?.updatedAt||0));
+    const trimmed=Object.fromEntries(entries.slice(0,MAX_LIKED_PUZZLES));
+    if(JSON.stringify(trimmed)!==JSON.stringify(store))saveLikedPuzzleStore(trimmed);
+    return trimmed;
+  }
   function forgetPuzzleFromLocalStorage(code){
     const normalized=normalizeCode(code);if(!normalized)return;
     const liked=getLikedPuzzleStore();delete liked[normalized];saveLikedPuzzleStore(liked);
@@ -385,13 +404,17 @@
     button.setAttribute('aria-label',button.title);
   }
 
-  function toggleLike(record){
+  async function toggleLike(record){
     const code=puzzleCodeOf(record);
     if(!code)return;
     const liked=getLikedPuzzleStore();
     const wasLiked=Boolean(liked[code]);
+    if(!wasLiked&&Object.keys(liked).length>=MAX_LIKED_PUZZLES){
+      await showAppDialog({kicker:'Liked puzzles',title:'25-puzzle limit reached',message:'You can like up to 25 Sudoku puzzles. Remove a liked puzzle before adding another one.',confirmLabel:'Got it',showCancel:false});
+      return;
+    }
     if(wasLiked) delete liked[code];
-    else liked[code]={...record,puzzle_number:code,puzzle:state.puzzle?.raw||record.puzzle||getCachedPuzzlePayload(code)?.puzzle||null};
+    else liked[code]={...record,puzzle_number:code,likedAt:Date.now(),puzzle:state.puzzle?.raw||record.puzzle||getCachedPuzzlePayload(code)?.puzzle||null};
     if(!saveLikedPuzzleStore(liked))return;
     if(showingLiked) libraryItems=getLikedPuzzles();
     renderLibrary();
@@ -656,6 +679,7 @@
   }
 
   function exportProgress(){
+    cleanupExpiredUnlikedProgress();
     const payload={format:'lovdoku-progress',version:1,exportedAt:new Date().toISOString(),progress:getProgressStore()};
     const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lovdoku-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
@@ -688,6 +712,10 @@
     const copied=await copyText(url);
     toast(copied?'Puzzle link copied.':'Could not share or copy the puzzle link.',3500);
   }
+  function showLikeStorageInfo(){
+    showAppDialog({kicker:'Saved progress',title:'How local progress is kept',message:'Liked puzzles keep their progress on this browser. Progress for puzzles you have not liked is automatically removed after 12 hours without an update. You can like up to 25 puzzles.',confirmLabel:'Got it',showCancel:false});
+  }
+
   function sharedPuzzleCodeFromUrl(){
     const params=new URLSearchParams(window.location.search);
     if(!params.has('puzzle'))return null;
@@ -709,6 +737,7 @@
         store[normalized]={code:normalized,values:Array.isArray(record.values)?record.values.map(num):[],notes:Array.isArray(record.notes)?record.notes.map(a=>Array.isArray(a)?a.map(num).filter(Boolean):[]):[],elapsed:Math.max(0,Number(record.elapsed)||0),mistakes:Math.max(0,Number(record.mistakes)||0),status:['Not Started','In Progress','Solved'].includes(record.status)?record.status:'Not Started',updatedAt:Number(record.updatedAt)||Date.now()};
       });
       if(!writeStorage(STORAGE_KEYS.progress,store))throw new Error('Progress could not be saved in this browser.');
+      cleanupExpiredUnlikedProgress();
       renderLibrary();setStatusFromState();toast('Progress imported.');
     }catch(err){toast(err.message||'The progress file could not be imported.')}
   }
@@ -1420,6 +1449,7 @@
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));
     $('likedBtn')?.addEventListener('click', showLikedPuzzles);
     $('currentLikeBtn')?.addEventListener('click', () => toggleLike(state.currentPuzzleRecord || { puzzle_number: state.currentPuzzleCode }));
+    $('likeInfoBtn')?.addEventListener('click', showLikeStorageInfo);
     $('shareBtn')?.addEventListener('click', sharePuzzleLink);
     $('appDialogConfirm')?.addEventListener('click', () => resolveAppDialog(true));
     $('appDialogCancel')?.addEventListener('click', () => resolveAppDialog(false));
@@ -1520,6 +1550,9 @@
 
   async function init() {
     await initStorage();
+    enforceLikedPuzzleLimit();
+    cleanupExpiredUnlikedProgress();
+    if(!progressCleanupTimer)progressCleanupTimer=setInterval(cleanupExpiredUnlikedProgress,PROGRESS_CLEANUP_INTERVAL_MS);
     setupPwa();
     loadFontSettings();
     setupEventListeners();

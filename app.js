@@ -558,12 +558,29 @@
 
   function showLikedPuzzles(){showingLiked=true;libraryItems=getLikedPuzzles();libraryOffset=libraryItems.length;libraryVisibleCount=libraryItems.length;libraryHasMore=false;renderLibrary();$('libraryStatus').textContent=libraryItems.length?`${libraryItems.length} liked puzzle${libraryItems.length===1?'':'s'}.`:'No liked puzzles yet.'}
 
+  function scrollLibraryByCard(){
+    const list=$('libraryList');
+    const card=list?.querySelector('.puzzle-card');
+    if(!list||!card)return;
+    const gap=parseFloat(getComputedStyle(list).rowGap)||0;
+    list.scrollBy({top:card.getBoundingClientRect().height+gap,behavior:'smooth'});
+  }
+
   async function handleLoadMore(){
     if(libraryLoading)return;
     const selectedStatus=$('statusFilter')?.value||'';
     const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;
-    if(filteredCount>libraryVisibleCount){libraryVisibleCount+=LIBRARY_PAGE_SIZE;renderLibrary();return}
-    if(libraryHasMore){libraryVisibleCount+=LIBRARY_PAGE_SIZE;await fetchLibrary({reset:false})}
+    if(filteredCount>libraryVisibleCount){
+      libraryVisibleCount+=LIBRARY_PAGE_SIZE;
+      renderLibrary();
+      requestAnimationFrame(scrollLibraryByCard);
+      return;
+    }
+    if(libraryHasMore){
+      libraryVisibleCount+=LIBRARY_PAGE_SIZE;
+      await fetchLibrary({reset:false});
+      requestAnimationFrame(scrollLibraryByCard);
+    }
   }
 
   async function fetchLibrary({reset=true}={}){

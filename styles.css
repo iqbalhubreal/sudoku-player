@@ -257,11 +257,20 @@ button { border: 0; cursor: pointer; }
 }
 
 .library-list {
+  --library-item-height: 84px;
   display: grid;
   gap: 10px;
+  max-height: calc((var(--library-item-height) * 5) + 40px + 4px);
+  overflow-y: auto;
+  padding: 2px 6px 2px 1px;
+  align-content: start;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .puzzle-card {
+  min-height: var(--library-item-height);
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 90px 1.4fr 1.2fr auto;
   align-items: center;
@@ -1039,6 +1048,7 @@ button { border: 0; cursor: pointer; }
   .library-toolbar { grid-template-columns: 1fr; }
   .progress-tools { justify-content: stretch; }
   .progress-tools .btn { flex: 1; }
+  .library-list { --library-item-height: 126px; }
   .puzzle-card { grid-template-columns: 1fr 1fr; gap: 10px 12px; padding: 14px; }
   .puzzle-actions { grid-column: 1 / -1; justify-content: flex-start; }
   .side { grid-template-columns: 1fr; gap: 16px; }
@@ -1051,6 +1061,7 @@ button { border: 0; cursor: pointer; }
 
 @media (max-width: 440px) {
   .hero h1 { font-size: 26px; }
+  .library-list { --library-item-height: 164px; }
   .puzzle-card { grid-template-columns: 1fr; }
   .meta-grid { gap: 8px; }
   .keypad { gap: 6px; }

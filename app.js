@@ -862,8 +862,17 @@
     owners.forEach(owner=>{const color=ownerColor(owner,index);if(color&&!painted){cell.style.backgroundColor=color;painted=true;cell.dataset.constraintColor=color;cell.classList.add('constraint-'+(owner.type==='custom_shading'?'custom':owner.type.replace('_','-')))}});
   }
 
+  function updateFullscreenButtonVisibility(){
+    const button=$('fullscreenBtn');
+    if(!button)return;
+    const available=state.puzzle?.mode==='multi_grid';
+    button.classList.toggle('hidden',!available);
+    button.setAttribute('aria-hidden',String(!available));
+  }
+
   function render(){
     if(!state.puzzle)return;
+    updateFullscreenButtonVisibility();
     const board=$('board');board.innerHTML='';board.classList.toggle('multi',state.puzzle.mode==='multi_grid');
     // Appearance is applied once when a puzzle is loaded. Re-rendering for cell selection or input
     // must not overwrite the settings that are active for this puzzle during the session.
@@ -1279,6 +1288,7 @@
   function load(puzzleRaw, {code, record, progress}={}){
     stopTimer();
     const parsed = normalize(puzzleRaw);
+    if(parsed.mode!=='multi_grid' && state.fsActive)exitFullscreen();
     state.puzzle = parsed;
     state.givens = [...parsed.givens];
     state.solution = [...parsed.solution];

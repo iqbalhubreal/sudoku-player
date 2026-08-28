@@ -383,6 +383,16 @@ button { border: 0; cursor: pointer; }
   transform: translateY(0);
 }
 
+#applyFiltersBtn {
+  transform: translateY(-2px);
+}
+#applyFiltersBtn:hover {
+  transform: translateY(-3px);
+}
+#applyFiltersBtn:active {
+  transform: translateY(-1px);
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;

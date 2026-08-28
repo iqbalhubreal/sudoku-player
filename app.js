@@ -477,7 +477,6 @@
     libraryHasMore=Boolean(snapshot.hasMore);
     libraryVisibleCount=LIBRARY_PAGE_SIZE;
     renderLibrary();
-    $('libraryStatus').textContent=`${Math.min(libraryVisibleCount,libraryItems.length)} of ${libraryItems.length} saved puzzles ready.`;
     return true;
   }
 

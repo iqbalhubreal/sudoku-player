@@ -535,8 +535,14 @@
     const filtered=(itemsOverride??libraryItems).filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus);
     const items=showingLiked?filtered:filtered.slice(0,libraryVisibleCount);
     const list=$('libraryList');
+    const moreWrap=$('loadMoreBtn')?.closest('.library-more');
     if(!append) list.innerHTML='';
-    if(!items.length&&!append){$('libraryEmpty').classList.remove('hidden');$('loadMoreBtn').classList.add('hidden');return}
+    if(!items.length&&!append){
+      $('libraryEmpty').classList.remove('hidden');
+      $('loadMoreBtn').classList.add('hidden');
+      if(moreWrap)list.appendChild(moreWrap);
+      return;
+    }
     $('libraryEmpty').classList.add('hidden');
     items.forEach(record=>{
       const item=document.createElement('div');item.className='puzzle-card';
@@ -553,6 +559,7 @@
       }
       item.append(code,main,meta,actions);list.appendChild(item);
     });
+    if(moreWrap)list.appendChild(moreWrap);
     updateLoadMoreButton();
   }
 

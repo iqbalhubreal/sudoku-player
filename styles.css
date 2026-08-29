@@ -355,8 +355,11 @@ button { border: 0; cursor: pointer; }
 
 .library-more {
   display: flex;
+  grid-column: 1 / -1;
   justify-content: center;
-  margin-top: 16px;
+  width: 100%;
+  margin-top: 6px;
+  margin-bottom: 2px;
 }
 
 .btn {

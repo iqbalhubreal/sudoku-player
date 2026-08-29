@@ -103,6 +103,7 @@
   let libraryVisibleCount = LIBRARY_PAGE_SIZE;
   let libraryHasMore = false;
   let libraryLoading = false;
+  let libraryRequestId = 0;
   let showingLiked = false;
   const removedPuzzleCodes = new Set();
 
@@ -530,8 +531,12 @@
     gridCount.value=gridType==='Single grid'?'':(options.includes(previous)?previous:'');
   }
 
-  function renderLibrary(itemsOverride=null,append=false){
-    const selectedStatus=$('statusFilter').value;
+  function clearLibraryCards(){
+    $('libraryList')?.querySelectorAll('.puzzle-card').forEach(card=>card.remove());
+  }
+
+  function renderLibrary(itemsOverride=null,append=false,ignoreStatus=false){
+    const selectedStatus=ignoreStatus?'':$('statusFilter').value;
     const filtered=(itemsOverride??libraryItems).filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus);
     const items=showingLiked?filtered:filtered.slice(0,libraryVisibleCount);
     const list=$('libraryList');
@@ -591,10 +596,10 @@
   }
 
   async function fetchLibrary({reset=true}={}){
-    if(libraryLoading)return;
     showingLiked=false;
+    const requestId=++libraryRequestId;
     const recentRequest=isRecentRequest(reset);
-    libraryLoading=true;$('applyFiltersBtn').disabled=true;$('loadMoreBtn').disabled=true;$('libraryStatus').textContent='Loading puzzles…';
+    libraryLoading=true;$('loadMoreBtn').disabled=true;$('libraryStatus').textContent='Loading puzzles…';
     try{
       const params=new URLSearchParams();
       params.set('limit',String(LIBRARY_BATCH_LIMIT));
@@ -606,6 +611,7 @@
       if(gridCount)params.set('gridCount',gridCount);
       if(constraint)params.set('constraint',constraint);
       const data=await apiFetch(`/puzzles?${params.toString()}`);
+      if(requestId!==libraryRequestId)return;
       if(reset){libraryItems=[];libraryVisibleCount=LIBRARY_PAGE_SIZE}
       libraryOffset=Number(data.nextOffset??(Number(data.offset||0)+Number(data.limit||LIBRARY_BATCH_LIMIT)));libraryHasMore=Boolean(data.hasMore);
       libraryItems=reset?[...(data.items||[])]:[...libraryItems,...(data.items||[])];
@@ -615,6 +621,7 @@
       $('libraryStatus').textContent=libraryItems.length?`${Math.min(libraryVisibleCount,libraryItems.length)} of ${libraryItems.length} puzzles loaded.`:'No puzzles match these selections.';
       updateLoadMoreButton();
     }catch(err){
+      if(requestId!==libraryRequestId)return;
       const cached=recentRequest?getCachedRecentPuzzles():[];
       if(cached.length){
         libraryItems=cached;
@@ -625,31 +632,60 @@
         $('libraryStatus').textContent=`Showing ${cached.length} saved recent puzzle${cached.length===1?'':'s'}.`;
         $('loadMoreBtn').classList.add('hidden');
       }else{
-        $('libraryList').innerHTML='';$('libraryEmpty').classList.remove('hidden');$('libraryEmpty').textContent=err.message||'The puzzle library could not be loaded.';$('libraryStatus').textContent='The puzzle library could not be loaded.';
+        clearLibraryCards();$('libraryEmpty').classList.remove('hidden');$('libraryEmpty').textContent=err.message||'The puzzle library could not be loaded.';$('libraryStatus').textContent='The puzzle library could not be loaded.';
       }
-    }finally{libraryLoading=false;$('applyFiltersBtn').disabled=false;$('loadMoreBtn').disabled=false}
+    }finally{
+      if(requestId===libraryRequestId){
+        libraryLoading=false;
+        $('loadMoreBtn').disabled=false;
+      }
+    }
   }
 
   async function searchPuzzle(){
     const code=normalizeCode($('librarySearch').value);
     if(!validCode(code)){toast('Enter a valid puzzle number.');return}
+    const requestId=++libraryRequestId;
     showingLiked=false;
+    libraryLoading=true;
+    $('loadMoreBtn').disabled=true;
     $('libraryStatus').textContent='Searching…';
-    $('libraryList').innerHTML='';$('libraryEmpty').classList.add('hidden');$('loadMoreBtn').classList.add('hidden');
+    clearLibraryCards();$('libraryEmpty').classList.add('hidden');$('loadMoreBtn').classList.add('hidden');
     const localRecord=getLoadedBatchRecords().find(record=>puzzleCodeOf(record)===code&&record?.puzzle);
     if(localRecord){
-      libraryItems=[localRecord];libraryOffset=1;libraryHasMore=false;libraryVisibleCount=1;renderLibrary();$('libraryStatus').textContent='1 puzzle found in the loaded batch.';$('libraryEmpty').classList.add('hidden');return;
+      if(requestId!==libraryRequestId)return;
+      libraryItems=[localRecord];libraryOffset=1;libraryHasMore=false;libraryVisibleCount=1;renderLibrary(null,false,true);$('libraryStatus').textContent='1 puzzle found in the loaded batch.';$('libraryEmpty').classList.add('hidden');libraryLoading=false;$('loadMoreBtn').disabled=false;return;
     }
     try{
       const data=await apiFetch(`/puzzles/${encodeURIComponent(code)}`);
-      const searchRecord={puzzle_number:data.puzzleNumber,...data.metadata,puzzle:data.puzzle};
-      cachePuzzlePayload(data.puzzleNumber||code,data.puzzle,searchRecord);
+      if(requestId!==libraryRequestId)return;
+      if(!data?.available||!data?.puzzle)throw new Error('This puzzle could not be found.');
+      const metadata=data.metadata||{};
+      const searchRecord={
+        puzzle_number:normalizeCode(data.puzzleNumber||code),
+        difficulty:metadata.difficulty,
+        grid_type:metadata.gridType||metadata.grid_type,
+        grid_count:metadata.gridCount??metadata.grid_count,
+        constraint_type:metadata.constraintType||metadata.constraint_type,
+        technique:metadata.technique,
+        created_at:metadata.createdAt||metadata.created_at,
+        updated_at:metadata.updatedAt||metadata.updated_at,
+        puzzle:data.puzzle
+      };
+      cachePuzzlePayload(searchRecord.puzzle_number,data.puzzle,searchRecord);
       libraryItems=[searchRecord];
-      renderLibrary();
+      libraryOffset=1;libraryHasMore=false;libraryVisibleCount=1;
+      renderLibrary(null,false,true);
       $('libraryStatus').textContent='1 puzzle found.';
       $('libraryEmpty').classList.add('hidden');
     }catch(err){
+      if(requestId!==libraryRequestId)return;
       libraryItems=[];renderLibrary([]);$('libraryStatus').textContent=err.message||'This puzzle could not be found.';
+    }finally{
+      if(requestId===libraryRequestId){
+        libraryLoading=false;
+        $('loadMoreBtn').disabled=false;
+      }
     }
   }
 
@@ -1482,6 +1518,7 @@
     }
 
     $('searchPuzzleBtn')?.addEventListener('click', searchPuzzle);
+    $('librarySearch')?.addEventListener('keydown', event => { if(event.key==='Enter'){event.preventDefault();searchPuzzle();} });
     $('applyFiltersBtn')?.addEventListener('click', applyFiltersLocalFirst);
     $('loadMoreBtn')?.addEventListener('click', handleLoadMore);
     $('recentBtn')?.addEventListener('click', () => fetchLibrary({ reset: true }));

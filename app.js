@@ -864,8 +864,8 @@
       const givens=multiValues(obj.givens?.values,obj.givens?.grids,layout,map),solution=multiValues(obj.solution?.values,obj.solution?.grids,layout,map);
       if(givens.every(v=>!v))throw new Error('No givens were found in this multi-grid puzzle.');
       const owners=Array.from({length:total},()=>[]);layout.forEach((g,gi)=>{for(let i=0;i<81;i++){const idx=map.gridCellIndices[gi][i];owners[idx].push({gi,lr:Math.floor(i/9),lc:i%9,type:g.constraint,label:g.label,customShadingName:g.customShadingName,groups:g.customShadingGroups,constraintGroups:g.constraintGroups||[]})}});
-      const gridDetails=layout.map(g=>g.customShadingName||g.label);
-      const constraintSummary=[...new Set(gridDetails)];
+      const gridDetails=[...new Set(layout.map(g=>g.customShadingName||g.label).filter(Boolean))];
+      const constraintSummary=[...gridDetails];
       return {raw:obj,mode,layout,map,total,givens,solution,owners,constraints,type,label:constraints.label||'Multi Grid Sudoku',difficulty:obj.difficulty||{},colors:obj.colors||{},settings:obj.settings||{},customGroups,gridCount:layout.length,gridDetails,constraintSummary};
     }
     let givens=gridFrom(obj.givens?.values),solution=gridFrom(obj.solution?.values);
@@ -1119,7 +1119,7 @@
     $('gridCountMeta').textContent = p.gridCount || 1;
     $('gridModeMeta').textContent = p.mode === 'multi_grid' ? 'Multi Grid' : 'Single Grid';
     const gridDetailsEl = $('gridDetailsMeta');
-    const gridDetails = p.gridDetails || [];
+    const gridDetails = [...new Set((p.gridDetails || []).map(label => String(label).trim()).filter(Boolean))];
     gridDetailsEl.innerHTML = gridDetails.length ? gridDetails.map(label=>`<span class="technique-tag">${label}</span>`).join('') : '<span class="techniques-empty">—</span>';
 
     const techEl = $('techniqueMeta');

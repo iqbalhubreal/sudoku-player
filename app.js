@@ -1,6 +1,188 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
+
+  const customSelectInstances = new Set();
+  const customSelectByElement = new WeakMap();
+
+  function syncCustomSelect(select) {
+    const widget = customSelectByElement.get(select);
+    if (!widget) return;
+    const selectedOption = select.options[select.selectedIndex];
+    widget.triggerLabel.textContent = selectedOption?.textContent || select.getAttribute('aria-label') || 'Select an option';
+    widget.trigger.disabled = select.disabled;
+    widget.trigger.setAttribute('aria-expanded', String(widget.wrapper.classList.contains('is-open')));
+    widget.menu.innerHTML = '';
+    [...select.options].forEach((option, index) => {
+      const optionButton = document.createElement('button');
+      optionButton.type = 'button';
+      optionButton.className = 'select-option';
+      optionButton.id = `${widget.menu.id}-${index}`;
+      optionButton.dataset.value = option.value;
+      optionButton.dataset.index = String(index);
+      optionButton.setAttribute('role', 'option');
+      optionButton.setAttribute('aria-selected', String(option.selected));
+      optionButton.disabled = option.disabled;
+      optionButton.textContent = option.textContent;
+      optionButton.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!option.disabled) {
+          select.value = option.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          syncCustomSelect(select);
+          closeCustomSelect(widget, true);
+        }
+      });
+      widget.menu.appendChild(optionButton);
+    });
+  }
+
+  function focusCustomOption(widget, index) {
+    const optionButtons = [...widget.menu.querySelectorAll('.select-option:not(:disabled)')];
+    if (!optionButtons.length) return;
+    const currentPosition = Math.max(0, optionButtons.findIndex(button => Number(button.dataset.index) === index));
+    const optionButton = optionButtons[currentPosition];
+    optionButtons.forEach(button => button.classList.toggle('is-highlighted', button === optionButton));
+    widget.highlightedIndex = Number(optionButton.dataset.index);
+    optionButton.focus({ preventScroll: true });
+    optionButton.scrollIntoView({ block: 'nearest' });
+  }
+
+  function positionCustomSelect(widget) {
+    if (!widget.wrapper.classList.contains('is-open')) return;
+    const rect = widget.trigger.getBoundingClientRect();
+    const gutter = 8;
+    const gap = 6;
+    const maxHeight = Math.min(280, Math.floor(window.innerHeight * 0.42));
+    const spaceBelow = window.innerHeight - rect.bottom - gutter;
+    const spaceAbove = rect.top - gutter;
+    const openAbove = spaceBelow < Math.min(maxHeight, 180) && spaceAbove > spaceBelow;
+    const availableHeight = Math.max(120, Math.min(maxHeight, openAbove ? spaceAbove - gap : spaceBelow - gap));
+    const left = Math.max(gutter, Math.min(rect.left, window.innerWidth - rect.width - gutter));
+    widget.menu.style.left = `${left}px`;
+    widget.menu.style.right = 'auto';
+    widget.menu.style.width = `${rect.width}px`;
+    widget.menu.style.maxHeight = `${availableHeight}px`;
+    widget.menu.style.top = openAbove ? 'auto' : `${rect.bottom + gap}px`;
+    widget.menu.style.bottom = openAbove ? `${window.innerHeight - rect.top + gap}px` : 'auto';
+  }
+
+  function closeCustomSelect(widget, restoreFocus = false) {
+    if (!widget.wrapper.classList.contains('is-open')) return;
+    widget.wrapper.classList.remove('is-open');
+    widget.trigger.setAttribute('aria-expanded', 'false');
+    widget.menu.classList.remove('is-open');
+    widget.menu.hidden = true;
+    if (restoreFocus) widget.trigger.focus();
+  }
+
+  function openCustomSelect(widget) {
+    if (widget.select.disabled) return;
+    customSelectInstances.forEach(other => { if (other !== widget) closeCustomSelect(other); });
+    widget.wrapper.classList.add('is-open');
+    widget.menu.hidden = false;
+    widget.menu.classList.add('is-open');
+    widget.trigger.setAttribute('aria-expanded', 'true');
+    positionCustomSelect(widget);
+    requestAnimationFrame(() => focusCustomOption(widget, widget.select.selectedIndex));
+  }
+
+  function enhanceSelect(select) {
+    if (!select || customSelectByElement.has(select)) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-select';
+    if (select.classList.contains('fs-select')) wrapper.classList.add('custom-select-dark');
+    select.parentNode.insertBefore(wrapper, select);
+    wrapper.appendChild(select);
+    select.classList.add('select-source');
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = `select-trigger ${select.className.replace(/\bselect-source\b/g, '').trim()}`;
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', `${select.id}Options`);
+    trigger.setAttribute('aria-label', select.getAttribute('aria-label') || 'Select an option');
+    const triggerLabel = document.createElement('span');
+    triggerLabel.className = 'select-trigger-label';
+    trigger.appendChild(triggerLabel);
+
+    const menu = document.createElement('div');
+    menu.id = `${select.id}Options`;
+    menu.className = 'select-menu';
+    if (select.classList.contains('fs-select')) menu.classList.add('select-menu-dark');
+    menu.setAttribute('role', 'listbox');
+    menu.hidden = true;
+
+    wrapper.insertBefore(trigger, select);
+    document.body.appendChild(menu);
+    const widget = { select, wrapper, trigger, triggerLabel, menu, highlightedIndex: select.selectedIndex };
+    customSelectInstances.add(widget);
+    customSelectByElement.set(select, widget);
+
+    trigger.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (wrapper.classList.contains('is-open')) closeCustomSelect(widget, true);
+      else openCustomSelect(widget);
+    });
+    trigger.addEventListener('keydown', event => {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Escape'].includes(event.key)) event.preventDefault();
+      if (event.key === 'Escape') closeCustomSelect(widget, true);
+      else if (event.key === 'ArrowDown') {
+        if (!wrapper.classList.contains('is-open')) openCustomSelect(widget);
+        else focusCustomOption(widget, widget.highlightedIndex + 1);
+      } else if (event.key === 'ArrowUp') {
+        if (!wrapper.classList.contains('is-open')) openCustomSelect(widget);
+        else focusCustomOption(widget, widget.highlightedIndex - 1);
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        if (wrapper.classList.contains('is-open')) closeCustomSelect(widget, true);
+        else openCustomSelect(widget);
+      }
+    });
+    menu.addEventListener('keydown', event => {
+      const optionButtons = [...menu.querySelectorAll('.select-option:not(:disabled)')];
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCustomSelect(widget, true);
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        const current = optionButtons.findIndex(button => Number(button.dataset.index) === widget.highlightedIndex);
+        const next = (current + direction + optionButtons.length) % optionButtons.length;
+        focusCustomOption(widget, Number(optionButtons[next].dataset.index));
+      } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        focusCustomOption(widget, Number(optionButtons[event.key === 'Home' ? 0 : optionButtons.length - 1].dataset.index));
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.target.click();
+      }
+    });
+    select.addEventListener('change', () => syncCustomSelect(select));
+    new MutationObserver(() => syncCustomSelect(select)).observe(select, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'label'] });
+    syncCustomSelect(select);
+  }
+
+  function setupCustomSelects() {
+    document.querySelectorAll('select').forEach(enhanceSelect);
+    if (setupCustomSelects.bound) return;
+    setupCustomSelects.bound = true;
+    document.addEventListener('click', event => {
+      customSelectInstances.forEach(widget => {
+        if (!widget.wrapper.contains(event.target) && !widget.menu.contains(event.target)) closeCustomSelect(widget);
+      });
+    });
+    const repositionOpenMenus = () => customSelectInstances.forEach(positionCustomSelect);
+    window.addEventListener('resize', repositionOpenMenus);
+    window.addEventListener('scroll', repositionOpenMenus, true);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') customSelectInstances.forEach(widget => closeCustomSelect(widget));
+    });
+  }
+
   const API_BASE_URL = 'https://sudoku-api.miriqbalhub.workers.dev/'.replace(/\/+$/,'');
   const state = {
     puzzle: null,
@@ -142,6 +324,9 @@
     if ($('fontFamilySelect')) $('fontFamilySelect').value = fontSettings.family;
     if ($('fontWeightSelect')) $('fontWeightSelect').value = fontSettings.weight;
     if ($('entryColorSelect')) $('entryColorSelect').value = fontSettings.entryColor;
+    syncCustomSelect($('fontFamilySelect'));
+    syncCustomSelect($('fontWeightSelect'));
+    syncCustomSelect($('entryColorSelect'));
 
     updateCellFontSizePx();
     updateFontPreviewCell();
@@ -529,6 +714,7 @@
     const options=gridType==='Single grid'?['1']:['1','2','3','4','5','6','7','8'];
     gridCount.innerHTML='<option value="">All grid counts</option>'+options.map(value=>`<option value="${value}">${value}</option>`).join('');
     gridCount.value=gridType==='Single grid'?'':(options.includes(previous)?previous:'');
+    syncCustomSelect(gridCount);
   }
 
   function clearLibraryCards(){
@@ -1246,11 +1432,15 @@
     });
 
     select.value = state.fsGridIndex;
+    syncCustomSelect(select);
   }
 
   function setFsGridIndex(index) {
     state.fsGridIndex = index;
-    if ($('fsGridSelect')) $('fsGridSelect').value = String(index);
+    if ($('fsGridSelect')) {
+      $('fsGridSelect').value = String(index);
+      syncCustomSelect($('fsGridSelect'));
+    }
     state.fsZoom = 1;
     state.fsPanX = 0;
     state.fsPanY = 0;
@@ -1397,7 +1587,7 @@
 
   function setupEventListeners() {
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA' || e.target.closest?.('.custom-select, .select-menu')) return;
       if (!state.puzzle) return;
 
       if (state.fsActive) {
@@ -1629,6 +1819,8 @@
       updateCellFontSizePx();
       if (state.fsActive) applyFsTransform();
     });
+
+    setupCustomSelects();
   }
 
   async function init() {

@@ -654,7 +654,7 @@
     if(!matches.length&&hasFilter){fetchLibrary({reset:true});return}
     showingLiked=false;libraryItems=matches;libraryOffset=matches.length;libraryHasMore=false;libraryVisibleCount=LIBRARY_PAGE_SIZE;renderLibrary();$('libraryStatus').textContent=matches.length?`${Math.min(libraryVisibleCount,matches.length)} of ${matches.length} loaded puzzle${matches.length===1?'':'s'} match.`:'No puzzles match these filters.';updateLoadMoreButton();
   }
-  function updateLoadMoreButton(){const button=$('loadMoreBtn');if(!button)return;const selectedStatus=$('statusFilter')?.value||'';const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;const canReveal=!showingLiked&&filteredCount>libraryVisibleCount;const canFetch=!showingLiked&&libraryHasMore;button.classList.toggle('hidden',!(canReveal||canFetch));button.disabled=libraryLoading}
+  function updateLoadMoreButton(){const button=$('loadMoreBtn');if(!button)return;const selectedStatus=$('statusFilter')?.value||'';const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;const hasMatches=filteredCount>0;const canReveal=!showingLiked&&hasMatches&&filteredCount>libraryVisibleCount;const canFetch=!showingLiked&&hasMatches&&libraryHasMore;button.classList.toggle('hidden',!(canReveal||canFetch));button.disabled=libraryLoading}
   function renderCachedLibraryImmediately(){
     const snapshot=getFreshLibrarySnapshot();
     if(!snapshot)return false;
@@ -729,9 +729,11 @@
     const moreWrap=$('loadMoreBtn')?.closest('.library-more');
     if(!append) list.innerHTML='';
     if(!items.length&&!append){
-      $('libraryEmpty').classList.remove('hidden');
-      $('loadMoreBtn').classList.add('hidden');
-      if(moreWrap)list.appendChild(moreWrap);
+      $('libraryEmpty')?.classList.remove('hidden');
+      if(moreWrap) {
+        list.appendChild(moreWrap);
+        moreWrap.querySelector('#loadMoreBtn')?.classList.add('hidden');
+      }
       return;
     }
     $('libraryEmpty').classList.add('hidden');

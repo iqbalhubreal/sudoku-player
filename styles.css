@@ -47,6 +47,10 @@
 
 * { box-sizing: border-box; }
 
+/* Keep native select controls from flashing before the custom comboboxes mount. */
+.js select { visibility: hidden; }
+.select-trigger { visibility: visible; }
+
 body {
   margin: 0;
   background: #f1f5f9;
@@ -423,6 +427,7 @@ button { border: 0; cursor: pointer; }
   color: var(--muted);
   font-weight: 600;
   display: flex;
+  visibility: hidden;
   align-items: center;
 }
 

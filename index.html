@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Comic+Neue:wght@400;700&family=Fira+Code:wght@500;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
+<script>document.documentElement.classList.add('js');</script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -91,7 +92,7 @@
       <input id="constraintFilter" placeholder="Constraint type" autocomplete="off" aria-label="Filter by constraint type">
     </div>
     <div class="library-toolbar">
-      <span class="library-status" id="libraryStatus"></span>
+      <span class="library-status" id="libraryStatus" aria-hidden="true"></span>
       <button class="btn secondary" id="applyFiltersBtn" type="button">Apply Filters</button>
     </div>
     <div id="libraryEmpty" class="library-empty hidden">No puzzles match these selections.</div>

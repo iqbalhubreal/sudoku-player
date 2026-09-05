@@ -1623,6 +1623,10 @@ button { border: 0; cursor: pointer; }
   pointer-events: auto;
 }
 
+.app-dialog.in-fullscreen {
+  z-index: 10050;
+}
+
 .app-dialog-card {
   width: min(100%, 470px);
   padding: 28px;

@@ -674,7 +674,7 @@
     const resolver=appDialogResolver;if(!resolver)return;
     appDialogResolver=null;
     const modal=$('appDialog');
-    modal?.classList.remove('open');modal?.setAttribute('aria-hidden','true');
+    modal?.classList.remove('open', 'in-fullscreen');modal?.setAttribute('aria-hidden','true');
     syncPopupScrollLock();
     resolver({confirmed});
   }
@@ -687,6 +687,7 @@
     $('appDialogConfirm').textContent=confirmLabel;
     $('appDialogCancel').textContent=cancelLabel;
     $('appDialogCancel').classList.toggle('hidden',!showCancel);
+    modal.classList.toggle('in-fullscreen', Boolean(state.fsActive));
     modal.classList.add('open');modal.setAttribute('aria-hidden','false');syncPopupScrollLock();
     setTimeout(()=>$('appDialogConfirm')?.focus(),0);
     return new Promise(resolve=>{appDialogResolver=resolve});
@@ -1171,11 +1172,20 @@
   function toggleNotes(){state.notesMode=!state.notesMode;$('notesToggle').classList.toggle('on',state.notesMode);toast(state.notesMode?'Notes mode on':'Notes mode off')}
   function coloredConstraintFor(index){for(const owner of state.puzzle?.owners?.[index]||[]){if(ownerColor(owner,index))return owner.type==='custom_shading'?'Custom shading':prettyConstraint(owner.type)}return ''}
   
+  function syncSolutionButtons(){
+    const label=state.solutionShown?'Hide solution':'Show solution';
+    [$('solveBtn'),$('fsSolveBtn')].forEach(button=>{
+      if(!button)return;
+      button.textContent=label;
+      button.classList.toggle('warn',state.solutionShown);
+      button.classList.toggle('secondary',!state.solutionShown);
+    });
+  }
+
   async function toggleSolution(){
     if(!state.puzzle) return;
-    const solveBtn = $('solveBtn');
     const puzzleCode=normalizeCode(state.currentPuzzleCode||state.currentPuzzleRecord?.puzzle_number);
-    
+
     if(!state.solutionShown) {
       if(!solutionWarningAcknowledged(puzzleCode)){
         const result=await showAppDialog({kicker:'Solution reveal',title:'Reveal the complete solution?',message:'This will fill the unsolved cells with the answer. You can hide the solution later, but revealing it may spoil the puzzle.',confirmLabel:'Reveal solution',cancelLabel:'Keep solving'});
@@ -1185,7 +1195,7 @@
 
       state.preSolutionValues = [...state.values];
       state.preSolutionNotes = state.notes.map(set => new Set(set));
-      
+
       state.solution.forEach((v, i) => {
         if (!state.givens[i]) {
           state.values[i] = v;
@@ -1195,12 +1205,7 @@
       state.wrong.clear();
       state.conflicts.clear();
       state.solutionShown = true;
-      
-      if (solveBtn) {
-        solveBtn.textContent = 'Hide solution';
-        solveBtn.classList.remove('secondary');
-        solveBtn.classList.add('warn');
-      }
+      syncSolutionButtons();
       toast('Solution shown');
     } else {
       if (state.preSolutionValues) {
@@ -1211,15 +1216,10 @@
       }
       state.solutionShown = false;
       state.conflicts = conflicts();
-      
-      if (solveBtn) {
-        solveBtn.textContent = 'Show solution';
-        solveBtn.classList.remove('warn');
-        solveBtn.classList.add('secondary');
-      }
+      syncSolutionButtons();
       toast('Solution hidden');
     }
-    
+
     render();
     setStatusFromState();
   }
@@ -1228,12 +1228,7 @@
     state.solutionShown = false;
     state.preSolutionValues = null;
     state.preSolutionNotes = null;
-    const solveBtn = $('solveBtn');
-    if (solveBtn) {
-      solveBtn.textContent = 'Show solution';
-      solveBtn.classList.remove('warn');
-      solveBtn.classList.add('secondary');
-    }
+    syncSolutionButtons();
   }
 
   function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n)){state.notes[i].delete(n)}else{const blocker=noteConflictPeer(i,n);if(blocker!==undefined){toast(`Note ${n} rejected: that number is already nearby.`);return}state.notes[i].add(n)}state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}

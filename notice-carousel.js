@@ -205,8 +205,7 @@
     media.classList.remove('hidden');
     requestAnimationFrame(() => media.classList.add('is-revealed'));
     if (actions.classList.contains('has-actions')) {
-      const delay = item.media.type === 'video' ? 5000 : 2000;
-      noticeState.timer = setTimeout(() => actions.classList.add('is-visible'), delay);
+      actions.classList.add('is-visible');
     }
   }
 

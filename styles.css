@@ -1002,7 +1002,7 @@ button { border: 0; cursor: pointer; }
 .notice-media img, .notice-media video { opacity:0; transform:scale(1.015); transition:opacity .45s ease, transform .45s ease; }
 .notice-media.is-revealed img, .notice-media.is-revealed video { opacity:1; transform:scale(1); }
 .notice-media-placeholder { min-height:130px; display:grid; place-items:center; padding:18px; color:#4338ca; background:linear-gradient(135deg,#eef2ff,#ecfeff); font-size:12px; font-weight:700; text-align:center; }
-.notice-actions { display:none; gap:10px; margin:12px 0 0; opacity:0; transform:translateY(8px); pointer-events:none; transition:opacity .45s ease, transform .45s ease; }
+.notice-actions { display:none; gap:10px; margin:12px 0 0; opacity:0; transform:translateY(8px); pointer-events:none; transition:none; }
 .notice-actions.has-actions { display:flex; }
 .notice-actions.is-visible { opacity:1; transform:translateY(0); pointer-events:auto; }
 .notice-actions .btn { flex:1; min-width:0; text-decoration:none; }

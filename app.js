@@ -272,7 +272,7 @@
     storageMaintenance: 'lovdoku.storage-maintenance.v1'
   };
   const RECENT_CACHE_LIMIT = 5;
-  const LIBRARY_BATCH_LIMIT = 50;
+  const LIBRARY_BATCH_LIMIT = 20;
   const LIBRARY_PAGE_SIZE = 5;
   const LIBRARY_CACHE_TTL_MS = 15 * 60 * 1000;
   const PUZZLE_CACHE_LIMIT = 50;

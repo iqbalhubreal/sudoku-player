@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lovdoku-shell-v6';
+const CACHE_NAME = 'lovdoku-shell-v7';
 const APP_SHELL = [
   './',
   './index.html',

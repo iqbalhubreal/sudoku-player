@@ -916,9 +916,9 @@ button { border: 0; cursor: pointer; }
 
 .board-notes-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  gap: 8px 28px;
+  gap: 16px;
   margin: 16px auto 0;
 }
 
@@ -1224,6 +1224,10 @@ button { border: 0; cursor: pointer; }
 }
 
 .fs-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: #1e293b;
   border-top: 1px solid #334155;
   padding: 10px 20px 14px;
@@ -1235,6 +1239,7 @@ button { border: 0; cursor: pointer; }
 }
 
 .fullscreen-overlay .keypad { margin: 0; max-width: 500px; width: 100%; }
+.fullscreen-overlay .board-notes-controls { margin: 0; }
 .fullscreen-overlay .board-notes-control { margin: 0; color: #94a3b8; }
 
 @media (max-width: 900px) {

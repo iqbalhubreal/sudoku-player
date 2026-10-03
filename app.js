@@ -1397,11 +1397,11 @@
     const overlay = $('fullscreenOverlay');
     const board = $('board');
     const keypad = $('keypad');
-    const notesControl = document.querySelector('.board-notes-control');
+    const notesControls = document.querySelector('.board-notes-controls');
 
     if (board && $('fsBoardSlot')) $('fsBoardSlot').appendChild(board);
     if (keypad && $('fsKeypadSlot')) $('fsKeypadSlot').appendChild(keypad);
-    if (notesControl && $('fsNotesSlot')) $('fsNotesSlot').appendChild(notesControl);
+    if (notesControls && $('fsNotesSlot')) $('fsNotesSlot').appendChild(notesControls);
 
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
@@ -1423,13 +1423,13 @@
     const overlay = $('fullscreenOverlay');
     const board = $('board');
     const keypad = $('keypad');
-    const notesControl = document.querySelector('.board-notes-control');
+    const notesControls = document.querySelector('.board-notes-controls');
     const boardWrap = document.querySelector('.board-wrap');
     const gameState = $('gameState');
 
     if (board && boardWrap) boardWrap.appendChild(board);
     if (keypad && gameState) gameState.appendChild(keypad);
-    if (notesControl && gameState) gameState.appendChild(notesControl);
+    if (notesControls && gameState) gameState.appendChild(notesControls);
 
     overlay.classList.remove('active');
     overlay.setAttribute('aria-hidden', 'true');

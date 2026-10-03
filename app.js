@@ -1416,9 +1416,29 @@
     requestAnimationFrame(() => {
       applyFsTransform();
     });
+    setupFsObserver();
+  }
+
+  // Re-fit whenever the viewport or board changes size (fonts loading, toolbar
+  // wrapping, address bar showing/hiding) so the board stays centered and sized.
+  let fsObserver = null;
+  function setupFsObserver() {
+    if (typeof ResizeObserver === 'undefined') return;
+    if (fsObserver) fsObserver.disconnect();
+    let raf = 0;
+    fsObserver = new ResizeObserver(() => {
+      if (!state.fsActive) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { updateCellFontSizePx(); applyFsTransform(); });
+    });
+    const vp = $('fsViewport');
+    const board = $('board');
+    if (vp) fsObserver.observe(vp);
+    if (board) fsObserver.observe(board);
   }
 
   function exitFullscreen() {
+    if (fsObserver) { fsObserver.disconnect(); fsObserver = null; }
     state.fsActive = false;
     const overlay = $('fullscreenOverlay');
     const board = $('board');
@@ -1512,9 +1532,6 @@
 
     const Vw = viewport.clientWidth || window.innerWidth;
     const Vh = viewport.clientHeight || (window.innerHeight - 150);
-    const footer = document.querySelector('.fs-footer');
-    const footerHeight = footer ? footer.offsetHeight : 0;
-    const availableVh = Math.max(1, Vh - footerHeight);
 
     const coords = state.puzzle.map.coords;
     const minR = Math.min(...coords.map(x => x[0]));
@@ -1526,7 +1543,7 @@
     const H = maxR - minR + 1;
 
     const firstCell = board.querySelector('.cell:not(.blank)');
-    const cellPx = firstCell ? (firstCell.clientWidth || 40) : 40;
+    const cellPx = (board.offsetWidth && W ? board.offsetWidth / W : (firstCell ? firstCell.clientWidth : 0)) || 40;
 
     const boardWidthPx = W * cellPx;
     const boardHeightPx = H * cellPx;
@@ -1537,7 +1554,7 @@
 
     if (state.fsGridIndex === 'all') {
       const scaleX = (Vw - 40) / boardWidthPx;
-      const scaleY = (availableVh - 40) / boardHeightPx;
+      const scaleY = (Vh - 40) / boardHeightPx;
       targetScale = Math.min(scaleX, scaleY) * state.fsZoom;
     } else {
       const gridIdx = Number(state.fsGridIndex);
@@ -1557,15 +1574,13 @@
 
       const gridPx = 9 * cellPx;
       const scaleX = (Vw - 60) / gridPx;
-      const scaleY = (availableVh - 60) / gridPx;
+      const scaleY = (Vh - 60) / gridPx;
       const fitGridScale = Math.min(scaleX, scaleY);
 
       targetScale = fitGridScale * state.fsZoom;
       targetPanX = basePanX * targetScale + state.fsPanX;
       targetPanY = basePanY * targetScale + state.fsPanY;
     }
-
-    targetPanY -= footerHeight / 2;
 
     layer.style.transform = `translate(calc(-50% + ${targetPanX}px), calc(-50% + ${targetPanY}px)) scale(${targetScale})`;
   }

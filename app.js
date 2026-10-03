@@ -192,6 +192,7 @@
     notes: Array.from({length:81},()=>new Set()),
     selected: -1,
     notesMode: false,
+    revealPencilMarks: false,
     mistakes: 0,
     wrong: new Set(),
     conflicts: new Set(),
@@ -1169,7 +1170,40 @@
   }
   function highlight(){if(state.selected<0)return;const selected=state.selected,sv=state.values[selected]||state.givens[selected],peers=peersOf(selected);document.querySelectorAll('.cell[data-index]').forEach(cell=>{const i=Number(cell.dataset.index);if(i!==selected&&peers.has(i))cell.classList.add('peer');if(sv&&((state.values[i]||state.givens[i])===sv))cell.classList.add('same');if(i===selected)cell.classList.add('selected')})}
   function move(key){if(!state.puzzle)return;let i=state.selected<0?0:state.selected;const [r,c]=state.puzzle.map.coords[i]||[0,0];let dr=0,dc=0;if(key==='ArrowUp')dr=-1;if(key==='ArrowDown')dr=1;if(key==='ArrowLeft')dc=-1;if(key==='ArrowRight')dc=1;const exact=state.puzzle.map.coordIndex.get(`${r+dr},${c+dc}`);if(exact!==undefined){select(exact);return}const candidates=state.puzzle.map.coords.map((x,k)=>({x,k})).filter(o=>(dr&&o.x[1]===c)||(dc&&o.x[0]===r)).sort((a,b)=>Math.abs((dr?a.x[0]:a.x[1])-(dr?r:c))-Math.abs((dr?b.x[0]:b.x[1])-(dr?r:c)));if(candidates.length)select(candidates[0].k)}
-  function toggleNotes(){state.notesMode=!state.notesMode;$('notesToggle').classList.toggle('on',state.notesMode);toast(state.notesMode?'Notes mode on':'Notes mode off')}
+  function toggleNotes(){state.notesMode=!state.notesMode;$('notesToggle').classList.toggle('on',state.notesMode);$('notesToggle')?.setAttribute('aria-pressed',String(state.notesMode));toast(state.notesMode?'Notes mode on':'Notes mode off')}
+  function candidateNotesFor(index){
+    if(state.givens[index]||state.values[index])return [];
+    const used=new Set();
+    peersOf(index).forEach(peer=>{const value=state.values[peer]||state.givens[peer];if(value)used.add(value)});
+    return Array.from({length:9},(_,n)=>n+1).filter(n=>!used.has(n));
+  }
+  function refreshAutoPencilMarks(){
+    if(!state.revealPencilMarks)return;
+    state.notes.forEach((notes,index)=>{
+      notes.clear();
+      candidateNotesFor(index).forEach(n=>notes.add(n));
+    });
+  }
+  async function toggleRevealPencilMarks(){
+    if(!state.puzzle)return;
+    if(state.revealPencilMarks){
+      state.revealPencilMarks=false;
+      $('revealPencilMarksToggle')?.classList.remove('on');
+      $('revealPencilMarksToggle')?.setAttribute('aria-pressed','false');
+      toast('Auto pencil marks off');
+      render();
+      return;
+    }
+    const result=await showAppDialog({kicker:'Pencil marks',title:'Reveal all pencil marks?',message:'This will replace your current notes with every possible pencil mark in each empty cell. The marks will update automatically as you enter or erase numbers.',confirmLabel:'Reveal pencil marks',cancelLabel:'Keep current notes'});
+    if(!result.confirmed)return;
+    state.revealPencilMarks=true;
+    $('revealPencilMarksToggle')?.classList.add('on');
+    $('revealPencilMarksToggle')?.setAttribute('aria-pressed','true');
+    refreshAutoPencilMarks();
+    persistProgress();
+    render();
+    toast('All pencil marks revealed');
+  }
   function coloredConstraintFor(index){for(const owner of state.puzzle?.owners?.[index]||[]){if(ownerColor(owner,index))return owner.type==='custom_shading'?'Custom shading':prettyConstraint(owner.type)}return ''}
   
   function syncSolutionButtons(){
@@ -1231,7 +1265,7 @@
     syncSolutionButtons();
   }
 
-  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n)){state.notes[i].delete(n)}else{const blocker=noteConflictPeer(i,n);if(blocker!==undefined){toast(`Note ${n} rejected: that number is already nearby.`);return}state.notes[i].add(n)}state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
+  function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n)){state.notes[i].delete(n)}else{const blocker=noteConflictPeer(i,n);if(blocker!==undefined){toast(`Note ${n} rejected: that number is already nearby.`);return}state.notes[i].add(n)}state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}if(state.revealPencilMarks)refreshAutoPencilMarks();state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
   function noteConflictPeer(index,n){return [...peersOf(index)].find(p=>(state.values[p]||state.givens[p])===n)}
   function autoRemoveNote(n,index){if(!n)return;peersOf(index).forEach(p=>state.notes[p].delete(n))}
   function conflicts(){const bad=new Set();groupSets().forEach(g=>{const seen=new Map();g.forEach(i=>{const v=state.values[i]||state.givens[i];if(v){if(!seen.has(v))seen.set(v,[]);seen.get(v).push(i)}});seen.forEach(arr=>{if(arr.length>1)arr.forEach(i=>bad.add(i))})});return bad}
@@ -1542,7 +1576,11 @@
     state.notes = Array.from({length: parsed.total}, () => new Set());
     state.selected = -1;
     state.notesMode = false;
+    state.revealPencilMarks = false;
     $('notesToggle')?.classList.remove('on');
+    $('notesToggle')?.setAttribute('aria-pressed','false');
+    $('revealPencilMarksToggle')?.classList.remove('on');
+    $('revealPencilMarksToggle')?.setAttribute('aria-pressed','false');
     state.mistakes = 0;
     state.wrong.clear();
     state.conflicts.clear();
@@ -1633,6 +1671,7 @@
     }
 
     $('notesToggle')?.addEventListener('click', toggleNotes);
+    $('revealPencilMarksToggle')?.addEventListener('click', toggleRevealPencilMarks);
     $('checkBtn')?.addEventListener('click', check);
     $('hintBtn')?.addEventListener('click', hint);
     $('resetBtn')?.addEventListener('click', reset);

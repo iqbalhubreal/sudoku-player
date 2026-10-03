@@ -914,12 +914,20 @@ button { border: 0; cursor: pointer; }
 
 .key.erase:hover { background: #ffe4e6; }
 
+.board-notes-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 28px;
+  margin: 16px auto 0;
+}
+
 .board-notes-control {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin: 16px auto 0;
+  margin: 0;
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;

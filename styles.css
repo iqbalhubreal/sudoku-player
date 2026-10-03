@@ -1221,6 +1221,8 @@ button { border: 0; cursor: pointer; }
   position: absolute;
   left: 50%;
   top: 50%;
+  width: max-content;
+  max-width: none;
   transform-origin: center center;
   transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
@@ -1233,6 +1235,10 @@ button { border: 0; cursor: pointer; }
 .fullscreen-overlay .board {
   background: transparent;
 }
+
+/* Never let the 50%-offset layer squeeze the board; the JS fit scale does the sizing. */
+.fullscreen-overlay .board.multi { max-width: none; }
+.fs-viewport { min-height: 0; }
 
 .fullscreen-overlay .board:not(.multi) {
   background: #ffffff;

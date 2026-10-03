@@ -1512,6 +1512,9 @@
 
     const Vw = viewport.clientWidth || window.innerWidth;
     const Vh = viewport.clientHeight || (window.innerHeight - 150);
+    const footer = document.querySelector('.fs-footer');
+    const footerHeight = footer ? footer.offsetHeight : 0;
+    const availableVh = Math.max(1, Vh - footerHeight);
 
     const coords = state.puzzle.map.coords;
     const minR = Math.min(...coords.map(x => x[0]));
@@ -1534,7 +1537,7 @@
 
     if (state.fsGridIndex === 'all') {
       const scaleX = (Vw - 40) / boardWidthPx;
-      const scaleY = (Vh - 40) / boardHeightPx;
+      const scaleY = (availableVh - 40) / boardHeightPx;
       targetScale = Math.min(scaleX, scaleY) * state.fsZoom;
     } else {
       const gridIdx = Number(state.fsGridIndex);
@@ -1554,13 +1557,15 @@
 
       const gridPx = 9 * cellPx;
       const scaleX = (Vw - 60) / gridPx;
-      const scaleY = (Vh - 60) / gridPx;
+      const scaleY = (availableVh - 60) / gridPx;
       const fitGridScale = Math.min(scaleX, scaleY);
 
       targetScale = fitGridScale * state.fsZoom;
       targetPanX = basePanX * targetScale + state.fsPanX;
       targetPanY = basePanY * targetScale + state.fsPanY;
     }
+
+    targetPanY -= footerHeight / 2;
 
     layer.style.transform = `translate(calc(-50% + ${targetPanX}px), calc(-50% + ${targetPanY}px)) scale(${targetScale})`;
   }

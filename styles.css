@@ -818,16 +818,30 @@ button { border: 0; cursor: pointer; }
 }
 
 .cell.blank::after { border: none !important; }
+.cell.blank::before { display: none; }
 
 .cell.given { color: var(--given); }
 
 .cell.selected {
-  box-shadow: inset 0 0 0 1.5px #6366f1;
+  box-shadow: none;
   z-index: 2;
 }
 
-.board:not(.multi) .cell.selected {
-  box-shadow: inset 0 0 0 2px #6366f1;
+.cell.selected::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  pointer-events: none;
+  z-index: 3;
+  background:
+    linear-gradient(#0f172a, #0f172a) top left / 8px 2px no-repeat,
+    linear-gradient(#0f172a, #0f172a) top left / 2px 8px no-repeat,
+    linear-gradient(#0f172a, #0f172a) top right / 8px 2px no-repeat,
+    linear-gradient(#0f172a, #0f172a) top right / 2px 8px no-repeat,
+    linear-gradient(#0f172a, #0f172a) bottom left / 8px 2px no-repeat,
+    linear-gradient(#0f172a, #0f172a) bottom left / 2px 8px no-repeat,
+    linear-gradient(#0f172a, #0f172a) bottom right / 8px 2px no-repeat,
+    linear-gradient(#0f172a, #0f172a) bottom right / 2px 8px no-repeat;
 }
 
 .cell.conflict {
@@ -926,7 +940,7 @@ button { border: 0; cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 7px;
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -1288,6 +1302,8 @@ button { border: 0; cursor: pointer; }
   .meta-grid { gap: 8px; }
   .keypad { gap: 6px; }
   .stats { flex-wrap: wrap; }
+  .board-notes-controls { gap: 12px; }
+  .board-notes-control { gap: 5px; font-size: 12px; }
 }
 
 .icon-btn {

@@ -96,6 +96,17 @@
       <button class="btn secondary" id="applyFiltersBtn" type="button">Apply Filters</button>
     </div>
     <div id="libraryEmpty" class="library-empty hidden">No puzzles match these selections.</div>
+    <div id="libraryLoading" class="library-loading hidden" role="status" aria-live="polite" aria-label="Loading puzzles">
+      <div class="library-loading-art" aria-hidden="true">
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+      </div>
+      <div class="library-loading-copy">
+        <strong>Arranging your puzzles</strong>
+        <span>Almost ready to play.</span>
+      </div>
+    </div>
     <div id="libraryList" class="library-list">
       <div class="library-more"><button class="btn ghost hidden" id="loadMoreBtn" type="button">Show More</button></div>
     </div>

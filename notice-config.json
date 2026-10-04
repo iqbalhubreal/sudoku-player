@@ -33,7 +33,8 @@
     {
       "id": "notice-2",
       "media": {
-        "type": "image"
+        "type": "image",
+        "src": "https://res.cloudinary.com/aldtntdc/image/upload/v1791092089/IMG_20261004_105456_fseg7e.jpg"
       },
       "buttonA": {
         "label": "Coming Soon",

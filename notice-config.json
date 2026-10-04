@@ -32,6 +32,7 @@
     },
     {
       "id": "notice-2",
+      "copy": "Sudoku with a Twist brings a colorful new challenge to classic Sudoku. With 84 unique puzzles and 42 different color-shape designs, each puzzle uses colored regions to add an extra rule: every color region must contain the numbers 1–9 exactly once. A fresh twist on a familiar favorite, with every puzzle offering a new shape and challenge.",
       "media": {
         "type": "image",
         "src": "https://res.cloudinary.com/aldtntdc/image/upload/v1791092089/IMG_20261004_105456_fseg7e.jpg"

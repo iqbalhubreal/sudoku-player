@@ -29,6 +29,20 @@
         "href": "https://lovdoku.shop/",
         "target": "_blank"
       }
+    },
+    {
+      "id": "notice-2",
+      "media": {
+        "type": "image"
+      },
+      "buttonA": {
+        "label": "Coming Soon",
+        "target": "_blank"
+      },
+      "buttonB": {
+        "label": "No Shop Yet",
+        "target": "_blank"
+      }
     }
   ]
 }

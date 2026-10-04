@@ -212,8 +212,10 @@
   function moveNoticeItem(delta) {
     const nextIndex = noticeState.index + delta;
     if (nextIndex < 0 || nextIndex >= noticeState.config.items.length) return;
+    const wasRevealed = noticeState.revealed;
     noticeState.index = nextIndex;
     renderNoticeItem();
+    if (wasRevealed) revealNoticeMedia();
   }
 
   function collapseNoticeMedia() {

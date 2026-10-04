@@ -1815,6 +1815,7 @@
     }
 
     function closeDrawer() {
+      window.noticeCarousel?.collapse();
       drawerPanel?.classList.remove('open');
       drawerOverlay?.classList.remove('open');
       drawerOverlay?.setAttribute('aria-hidden', 'true');

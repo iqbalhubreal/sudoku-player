@@ -648,12 +648,17 @@
     return (!difficulty||record.difficulty===difficulty)&&(!gridType||record.grid_type===gridType)&&(!gridCount||String(record.grid_count||1)===String(gridCount))&&(!constraint||String(record.constraint_type||'').toLowerCase().includes(constraint));
   }
   function applyFiltersLocalFirst(){
+    const hasCatalogFilter=Boolean($('difficultyFilter').value||$('gridTypeFilter').value||$('gridCountFilter').value||$('constraintFilter').value.trim());
+    // Catalog filters must be evaluated by the API. The local library is only a
+    // paginated batch, so using it as the complete filtered result set can hide
+    // the Load more button when just one item in that batch matches.
+    if(hasCatalogFilter){fetchLibrary({reset:true});return}
+
+    // Status is local progress data and is intentionally filtered from the
+    // already loaded library without changing the server pagination cursor.
     const candidates=getLoadedBatchRecords();
     if(!candidates.length){fetchLibrary({reset:true});return}
-    const hasFilter=Boolean($('difficultyFilter').value||$('gridTypeFilter').value||$('gridCountFilter').value||$('constraintFilter').value.trim());
-    const matches=candidates.filter(matchesLibraryFilters);
-    if(!matches.length&&hasFilter){fetchLibrary({reset:true});return}
-    showingLiked=false;libraryItems=matches;libraryOffset=matches.length;libraryHasMore=false;libraryVisibleCount=LIBRARY_PAGE_SIZE;renderLibrary();$('libraryStatus').textContent=matches.length?`${Math.min(libraryVisibleCount,matches.length)} of ${matches.length} loaded puzzle${matches.length===1?'':'s'} match.`:'No puzzles match these filters.';updateLoadMoreButton();
+    showingLiked=false;libraryItems=candidates;libraryOffset=candidates.length;libraryHasMore=false;libraryVisibleCount=LIBRARY_PAGE_SIZE;renderLibrary();$('libraryStatus').textContent=candidates.length?`${Math.min(libraryVisibleCount,candidates.length)} of ${candidates.length} loaded puzzle${candidates.length===1?'':'s'} match.`:'No puzzles match these filters.';updateLoadMoreButton();
   }
   function updateLoadMoreButton(){const button=$('loadMoreBtn');if(!button)return;const selectedStatus=$('statusFilter')?.value||'';const filteredCount=libraryItems.filter(record=>!selectedStatus||progressStatusFor(record.puzzle_number)===selectedStatus).length;const hasMatches=filteredCount>0;const canReveal=!showingLiked&&hasMatches&&filteredCount>libraryVisibleCount;const canFetch=!showingLiked&&hasMatches&&libraryHasMore;button.classList.toggle('hidden',!(canReveal||canFetch));button.disabled=libraryLoading}
   function renderCachedLibraryImmediately(){

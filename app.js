@@ -217,7 +217,8 @@
     fsPanStart: { x: 0, y: 0 },
     fsPointers: new Map(),
     fsPinchStartDistance: 0,
-    fsPinchStartZoom: 1
+    fsPinchStartZoom: 1,
+    alertOnDuplicates: true
   };
 
   let deferredInstallPrompt = null;
@@ -269,7 +270,8 @@
     librarySnapshot: 'lovdoku.library-snapshot.v1',
     fontSettings: 'lovdoku.font-settings.v1',
     solutionWarnings: 'lovdoku.solution-warnings.v1',
-    storageMaintenance: 'lovdoku.storage-maintenance.v1'
+    storageMaintenance: 'lovdoku.storage-maintenance.v1',
+    gameSettings: 'lovdoku.game-settings.v1'
   };
   const RECENT_CACHE_LIMIT = 5;
   const LIBRARY_BATCH_LIMIT = 10;
@@ -1287,7 +1289,9 @@
   function input(n){if(!state.puzzle||state.selected<0)return;const i=state.selected;if(state.givens[i]){toast('Given clues cannot be changed.');return}if(state.notesMode&&n){if(state.notes[i].has(n)){state.notes[i].delete(n)}else{const blocker=noteConflictPeer(i,n);if(blocker!==undefined){toast(`Note ${n} rejected: that number is already nearby.`);return}state.notes[i].add(n)}state.values[i]=0}else{state.values[i]=n;state.notes[i].clear();autoRemoveNote(n,i);if(n&&!state.startedAt){state.startedAt=Date.now();startTimer()}}if(state.revealPencilMarks)refreshAutoPencilMarks();state.wrong.delete(i);state.conflicts=conflicts();syncStatusAfterChange();render();if(state.conflicts.has(i)){const region=coloredConstraintFor(i);setStatus('Duplicate number',region?`This number is repeated inside the colored ${region} region.`:'This number already appears in the same row, column, or box.','bad')}else setStatusFromState();}
   function noteConflictPeer(index,n){return [...peersOf(index)].find(p=>(state.values[p]||state.givens[p])===n)}
   function autoRemoveNote(n,index){if(!n)return;peersOf(index).forEach(p=>state.notes[p].delete(n))}
-  function conflicts(){const bad=new Set();groupSets().forEach(g=>{const seen=new Map();g.forEach(i=>{const v=state.values[i]||state.givens[i];if(v){if(!seen.has(v))seen.set(v,[]);seen.get(v).push(i)}});seen.forEach(arr=>{if(arr.length>1)arr.forEach(i=>bad.add(i))})});return bad}
+  function conflicts(){
+    if (!state.alertOnDuplicates) return new Set();
+    const bad=new Set();groupSets().forEach(g=>{const seen=new Map();g.forEach(i=>{const v=state.values[i]||state.givens[i];if(v){if(!seen.has(v))seen.set(v,[]);seen.get(v).push(i)}});seen.forEach(arr=>{if(arr.length>1)arr.forEach(i=>bad.add(i))})});return bad}
   function check(){const bad=conflicts();state.conflicts=bad;let wrong=0;state.values.forEach((v,i)=>{if(v&&state.solution[i]&&v!==state.solution[i]&&!state.givens[i]){state.wrong.add(i);wrong++}});state.mistakes+=wrong;if(state.values.some((v,i)=>!state.givens[i]&&v))state.status=isSolved()?'Solved':'In Progress';state.finished=state.status==='Solved';persistProgress();renderLibrary();render();if(bad.size||wrong){setStatus('Keep going','Some entries need attention. Red cells are conflicts or incorrect answers.','bad');toast(`${bad.size+wrong} answer${bad.size+wrong===1?'':'s'} need attention.`)}else if(isSolved()){setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}else{setStatus('In Progress','Your progress is being saved automatically.','');toast('No mistakes so far.')}}
   function isSolved(){return state.values.every((v,i)=>v===state.solution[i]&&v>0)}
   function checkComplete(){if(state.solution.every(Boolean)&&isSolved()){state.finished=true;state.status='Solved';persistProgress();renderLibrary();setStatus('Solved','Puzzle complete — every required cell is correct.','ok');toast('Puzzle complete!')}}
@@ -1905,6 +1909,25 @@
     cleanupExpiredUnlikedProgress();
     if(!progressCleanupTimer)progressCleanupTimer=setInterval(cleanupExpiredUnlikedProgress,PROGRESS_CLEANUP_INTERVAL_MS);
     setupPwa();
+    const savedGameSettings = readStorage(STORAGE_KEYS.gameSettings, {});
+    if (savedGameSettings && typeof savedGameSettings === 'object') {
+      state.alertOnDuplicates = savedGameSettings.alertOnDuplicates !== false;
+    }
+    const toggle = $('duplicateAlertToggle');
+    if (toggle) {
+      const updateToggleUI = () => {
+        toggle.setAttribute('aria-pressed', String(state.alertOnDuplicates));
+        toggle.classList.toggle('on', state.alertOnDuplicates);
+      };
+      updateToggleUI();
+      toggle.addEventListener('click', () => {
+        state.alertOnDuplicates = !state.alertOnDuplicates;
+        updateToggleUI();
+        writeStorage(STORAGE_KEYS.gameSettings, { alertOnDuplicates: state.alertOnDuplicates });
+        state.conflicts = conflicts();
+        render();
+      });
+    }
     loadFontSettings();
     setupEventListeners();
     window.noticeCarousel?.initialize();

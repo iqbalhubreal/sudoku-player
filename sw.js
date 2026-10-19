@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lovdoku-shell-v7';
+const CACHE_NAME = 'sudoku-library-shell-v7';
 const APP_SHELL = [
   './',
   './index.html',
@@ -24,7 +24,7 @@ self.addEventListener('activate', event => {
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(key => key.startsWith('lovdoku-shell-') && key !== CACHE_NAME)
+          .filter(key => key.startsWith('sudoku-library-shell-') && key !== CACHE_NAME)
           .map(key => caches.delete(key))
       ))
       .then(() => self.clients.claim())

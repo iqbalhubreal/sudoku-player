@@ -263,15 +263,15 @@
   }
 
   const STORAGE_KEYS = {
-    progress: 'lovdoku.progress.v1',
-    recentPuzzles: 'lovdoku.recent-puzzles.v1',
-    likedPuzzles: 'lovdoku.liked-puzzles.v1',
-    puzzleCache: 'lovdoku.puzzle-cache.v1',
-    librarySnapshot: 'lovdoku.library-snapshot.v1',
-    fontSettings: 'lovdoku.font-settings.v1',
-    solutionWarnings: 'lovdoku.solution-warnings.v1',
-    storageMaintenance: 'lovdoku.storage-maintenance.v1',
-    gameSettings: 'lovdoku.game-settings.v1'
+    progress: 'sudoku-library.progress.v1',
+    recentPuzzles: 'sudoku-library.recent-puzzles.v1',
+    likedPuzzles: 'sudoku-library.liked-puzzles.v1',
+    puzzleCache: 'sudoku-library.puzzle-cache.v1',
+    librarySnapshot: 'sudoku-library.library-snapshot.v1',
+    fontSettings: 'sudoku-library.font-settings.v1',
+    solutionWarnings: 'sudoku-library.solution-warnings.v1',
+    storageMaintenance: 'sudoku-library.storage-maintenance.v1',
+    gameSettings: 'sudoku-library.game-settings.v1'
   };
   const RECENT_CACHE_LIMIT = 5;
   const LIBRARY_BATCH_LIMIT = 10;
@@ -392,7 +392,7 @@
     if (settings.thickLineColor) document.documentElement.style.setProperty('--thick-line-color', settings.thickLineColor);
   }
 
-  const IDB_NAME='lovdoku';
+  const IDB_NAME='sudoku-library';
   const IDB_VERSION=3;
   const IDB_STORE='kv';
   const IDB_PUZZLE_STORE='puzzles';
@@ -953,9 +953,9 @@
 
   function exportProgress(){
     cleanupExpiredUnlikedProgress();
-    const payload={format:'lovdoku-progress',version:1,exportedAt:new Date().toISOString(),progress:getProgressStore()};
+    const payload={format:'sudoku-library-progress',version:1,exportedAt:new Date().toISOString(),progress:getProgressStore()};
     const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lovdoku-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`sudoku-library-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Progress exported.');
   }
 
   function puzzleShareUrl(){

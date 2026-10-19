@@ -1,6 +1,6 @@
 {
-  "name": "Lovdoku — Constraint Sudoku",
-  "short_name": "Lovdoku",
+  "name": "Sudoku Library — Constraint Sudoku",
+  "short_name": "Sudoku Library",
   "description": "Choose, play, and save Constraint Sudoku puzzles.",
   "lang": "en",
   "dir": "ltr",

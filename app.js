@@ -247,12 +247,12 @@
     window.addEventListener('appinstalled', () => {
       deferredInstallPrompt = null;
       setInstallButtonVisible(false);
-      toast('Lovdoku was installed successfully.');
+      toast('Sudoku Library was installed successfully.');
     });
 
     $('installAppBtn')?.addEventListener('click', async () => {
       if (!deferredInstallPrompt) {
-        toast('Use your browser menu to install Lovdoku.');
+        toast('Use your browser menu to install Sudoku Library.');
         return;
       }
       setInstallButtonVisible(false);
@@ -686,7 +686,7 @@
     syncPopupScrollLock();
     resolver({confirmed});
   }
-  function showAppDialog({kicker='Lovdoku',title='Please confirm',message='',confirmLabel='Continue',cancelLabel='Cancel',showCancel=true}={}){
+  function showAppDialog({kicker='Sudoku Library',title='Please confirm',message='',confirmLabel='Continue',cancelLabel='Cancel',showCancel=true}={}){
     const modal=$('appDialog');
     if(!modal)return Promise.resolve({confirmed:window.confirm(message)});
     $('appDialogKicker').textContent=kicker;
@@ -973,7 +973,7 @@
   async function sharePuzzleLink(){
     if(!state.currentPuzzleCode){toast('Choose a puzzle first.');return}
     const url=puzzleShareUrl();
-    const shareData={title:`Lovdoku Puzzle ${normalizeCode(state.currentPuzzleCode)}`,text:`Play Lovdoku puzzle ${normalizeCode(state.currentPuzzleCode)}`,url};
+    const shareData={title:`Sudoku Library Puzzle ${normalizeCode(state.currentPuzzleCode)}`,text:`Play Sudoku Library puzzle ${normalizeCode(state.currentPuzzleCode)}`,url};
     try{
       if(typeof navigator.share==='function'){
         await navigator.share(shareData);
@@ -989,7 +989,7 @@
     showAppDialog({kicker:'Saved progress',title:'How local progress is kept',message:'Liked puzzles keep their progress on this browser. Progress for puzzles you have not liked is automatically removed after 12 hours without an update. You can like up to 25 puzzles.',confirmLabel:'Got it',showCancel:false});
   }
   function showProgressDataInfo(){
-    showAppDialog({kicker:'Progress Data',title:'Import and export progress',message:'Export Progress downloads a JSON backup of your saved progress. Import Progress restores and merges a compatible Lovdoku JSON backup into this browser. Nothing is uploaded to the server.',confirmLabel:'Got it',showCancel:false});
+    showAppDialog({kicker:'Progress Data',title:'Import and export progress',message:'Export Progress downloads a JSON backup of your saved progress. Import Progress restores and merges a compatible Sudoku Library JSON backup into this browser. Nothing is uploaded to the server.',confirmLabel:'Got it',showCancel:false});
   }
 
   function sharedPuzzleCodeFromUrl(){
